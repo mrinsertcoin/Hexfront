@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bjuiu6v7ank23"]
+
+[ext_resource type="Script" path="res://scripts/app/app_controller.gd" id="1"]
+
+[node name="Hexfront" type="Node"]
+script = ExtResource("1")

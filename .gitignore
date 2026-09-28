@@ -1,0 +1,21 @@
+# Godot 4.6 generated/import cache
+.godot/
+/android/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Local editor state
+.idea/
+.vscode/settings.json
+
+# Builds and exports
+build/
+builds/
+exports/
+dist/
+
+# Temporary output
+*.tmp
+*.log

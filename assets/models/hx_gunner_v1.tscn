@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_1"]
+top_radius = 0.45
+bottom_radius = 0.45
+height = 0.3
+radial_segments = 16
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2"]
+albedo_color = Color(0.7, 0.7, 0.7,1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_3"]
+size = Vector3(0.2, 0.2, 0.8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4"]
+albedo_color = Color(0.2, 0.6, 1.0,1)
+
+[node name="Root" type="Node3D"]
+
+[node name="HX_Body" type="MeshInstance3D" parent="."]
+mesh = SubResource("CylinderMesh_1")
+material_override = SubResource("StandardMaterial3D_2")
+
+[node name="HX_TeamAccent" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_3")
+material_override = SubResource("StandardMaterial3D_4")

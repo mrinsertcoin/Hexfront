@@ -1,0 +1,7 @@
+# Normalize EOL for all files that Git considers text files.
+* text=auto eol=lf
+
+# Large binary source/game models
+assets/LS_spider.glb filter=lfs diff=lfs merge=lfs -text
+assets/LS_ant_queen.glb filter=lfs diff=lfs merge=lfs -text
+assets/hx_gunner_v1.glb filter=lfs diff=lfs merge=lfs -text

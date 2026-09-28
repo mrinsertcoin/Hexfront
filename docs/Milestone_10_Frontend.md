@@ -1,0 +1,15 @@
+# Milestone 10 — Main menu, setup, and options
+
+`AppController` is the single navigation owner. `scenes/main.tscn` now launches it; the existing board lives in `scenes/game.tscn` and is created only after setup validation. Returning to Main Menu frees the board and clears the copied session configuration. Escape opens the pause overlay during play and navigates back elsewhere. Pause Options calls the same options builder used by the main menu.
+
+`MatchConfig` contains `world_seed`, `planet_size`, both faction names, opponent controller, and AI difficulty. The board consumes a copy before `_ready()`, then builds its grid, generation recipe, controller map, faction colors, and world exactly once. Restart does not alter the recipe or seed. Blue/Red are the only current faction identities; Standard is the only current AI difficulty.
+
+Planet presets are centralized in `MatchConfig.SIZE_DEFINITIONS`: Dev/Tiny is subdivision 3, radius 12, 642 cells; Small is subdivision 4, radius 24, 2,562 cells; Medium is subdivision 5, radius 48, 10,242 cells. Normal setup exposes only Small and Medium and defaults to Small. Doubling radius with each subdivision preserves approximate local cell scale.
+
+`UserSettings` persists a separate `user://hexfront.cfg` through `ConfigFile`. Wired options are fullscreen, VSync, master bus volume, camera orbit sensitivity, wheel response, drag threshold, and terrain mesh quality. Display/audio changes apply globally; camera values also apply to a running board; terrain quality applies to the next match. No empty music/effects controls are shown because the project has no music/effects buses or playback yet.
+
+Verification added `tests/frontend.gd` and `tests/frontend_graphical.gd`. The headless test covers launch, disabled Load Game, default size, seed validation, Small topology/radius, Human/AI wiring, faction colors, deterministic replay, changed-seed output, session cleanup, pause/options/resume, settings round-trip, and Medium mapping. Graphical captures verify the main, setup, shared options, running game, pause, pause-options, and returned-main screens. The full runner now imports and executes 17 suites.
+
+Completed verification: import/parse and all 17 headless suites passed. The dedicated rendered frontend flow passed with zero failures at 1152×648, and its six menu/game captures were inspected. The final targeted world-regeneration check also passed after synchronizing debug seed changes back into the active session config. Logs and captures are stored under `.godot/10_*`.
+
+Limitations: Load Game is intentionally disabled. Factions currently select the two existing team identities/colors and share the same unit roster. AI has one existing behavior level, Standard. Resolution selection, separate music/effects volume, final menu art, and save/load remain future work.

@@ -1,0 +1,23 @@
+[gd_scene load_steps=5 format=3]
+
+[sub_resource type="BoxMesh" id="BoxMesh_1"]
+size = Vector3(0.6, 0.9, 0.4)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2"]
+albedo_color = Color(0.75, 0.75, 0.75,1)
+
+[sub_resource type="SphereMesh" id="SphereMesh_3"]
+radius = 0.18
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_4"]
+albedo_color = Color(0.2, 0.6, 1.0,1)
+
+[node name="Root" type="Node3D"]
+
+[node name="HX_Body" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_1")
+material_override = SubResource("StandardMaterial3D_2")
+
+[node name="HX_TeamAccent" type="MeshInstance3D" parent="."]
+mesh = SubResource("SphereMesh_3")
+material_override = SubResource("StandardMaterial3D_4")
