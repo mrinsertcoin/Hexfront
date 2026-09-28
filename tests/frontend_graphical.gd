@@ -39,7 +39,11 @@ func _run() -> void:
 	await capture("pause")
 	app.show_options(true)
 	await capture("pause_options")
-	app._leave_options()
+	var back: Button
+	for node: Node in app.find_children("*", "Button", true, false):
+		if (node as Button).text == "Back": back = node as Button
+	check(back != null, "Shared Options Back exists")
+	if back != null: back.pressed.emit()
 	app.resume_game()
 	check(app.screen_name == "game" and not paused, "Graphical pause flow resumes")
 	app.show_main_menu()

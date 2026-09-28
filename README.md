@@ -123,7 +123,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/run_all.ps1
 & $godotExecutable --path . --script res://tests/animation.gd --quit-after 5000
 ```
 
-The runner imports/parses first, then runs **17 headless suites**: topology, procedural world, controlled/generated hydrology, world UI, terrain geometry/picking, globe picking/transforms, surface camera/navigation, frontend/session flow, movement, hotseat, combat, combat UI, economy, economy UI, AI, resources, and animation. It rejects script/engine errors, leaked objects, missing completion markers and nonzero failures, even if Godot returns exit code 0. Logs are saved under `.godot/10_*.log`.
+The runner imports/parses first, then runs **18 headless suites**: topology, procedural world, controlled/generated hydrology, world UI, terrain geometry/picking, globe picking/transforms, surface camera/navigation, frontend/session flow and real-callback navigation, movement, hotseat, combat, combat UI, economy, economy UI, AI, resources, and animation. It rejects script/engine errors, leaked objects, missing completion markers and nonzero failures, even if Godot returns exit code 0. Logs are saved under `.godot/10_*.log`.
 
 Coverage includes all six topology subdivision counts and generated worlds at levels 0 through 4; deterministic serialization and fingerprints, independent sub-seeds, seam continuity, latitude and elevation effects, normalized biome blends, connected regions and deterministic cleanup; plus adjacency, pathfinding, picking, movement, combat, economy, AI, restart, and rig tracks. The procedural suite performs 80,371 checks at the default seed.
 

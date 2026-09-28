@@ -49,8 +49,14 @@ func _input(event: InputEvent) -> void:
 
 func _clear_menu() -> void:
 	if menu_layer != null:
-		menu_layer.free()
+		# Navigation is commonly invoked by a Button inside this layer. Immediate
+		# free() destroys the signal emitter while `pressed` is still unwinding,
+		# which Godot treats as an error and can terminate a debug run. Detach the
+		# old screen immediately, then let SceneTree dispose it safely.
+		var old_layer := menu_layer
 		menu_layer = null
+		remove_child(old_layer)
+		old_layer.queue_free()
 
 func _clear_match() -> void:
 	get_tree().paused = false
@@ -268,8 +274,8 @@ func show_options(from_pause: bool = false) -> void:
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 10)
 	column.add_child(actions)
-	var cancel := _button(actions, "Cancel", _leave_options)
-	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var back := _button(actions, "Back", _leave_options)
+	back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var apply := _button(actions, "Apply", apply_options)
 	apply.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	apply.grab_focus()

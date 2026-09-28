@@ -11,7 +11,7 @@ if ($LASTEXITCODE -ne 0 -or $importOutput -match '(?m)^(SCRIPT ERROR:|ERROR:)') 
     throw 'Godot import failed.'
 }
 Write-Output 'PASS import/parse'
-foreach ($suite in @('planet_grid','planet_world','hydrology','world_ui','terrain','smoke','camera_navigation','frontend','movement','hotseat','combat','combat_ui','economy','economy_ui','ai','resources','animation')) {
+foreach ($suite in @('planet_grid','planet_world','hydrology','world_ui','terrain','smoke','camera_navigation','frontend','frontend_navigation','movement','hotseat','combat','combat_ui','economy','economy_ui','ai','resources','animation')) {
     # Watchdog prevents an aborted async test from hanging forever.
     # Exit code alone is insufficient: Godot can return 0 after a script error.
     $output = & $GodotExecutable --headless --path $projectDirectory --script "res://tests/$suite.gd" --quit-after 5000 2>&1 | Out-String
