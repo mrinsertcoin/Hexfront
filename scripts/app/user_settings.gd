@@ -50,3 +50,6 @@ func camera_configuration() -> TacticalCameraConfig:
 
 func terrain_subdivision() -> int:
 	return 4 if terrain_quality == "Medium" else 5
+
+func terrain_texture_resolution() -> int:
+	return 256 if terrain_quality == "Medium" else 512

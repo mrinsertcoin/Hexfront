@@ -1,0 +1,4 @@
+﻿Original material: Grass007
+Original archive:  Grass007_2K-PNG.zip
+Hexfront key:      terrain_grass_lush
+Godot normal map:  normal_gl.png

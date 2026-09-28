@@ -95,6 +95,7 @@ func apply_user_settings(settings: UserSettings) -> void:
 	camera_config = settings.camera_configuration()
 	if terrain_config == null: terrain_config = TerrainRenderConfig.new()
 	terrain_config.terrain_subdivision_level = settings.terrain_subdivision()
+	terrain_config.texture_resolution = settings.terrain_texture_resolution()
 	if camera != null:
 		navigation.config = camera_config
 		navigation.apply_transform()

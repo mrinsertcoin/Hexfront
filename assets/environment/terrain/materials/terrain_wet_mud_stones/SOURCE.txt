@@ -1,0 +1,4 @@
+﻿Original material: Ground109
+Original archive:  Ground109_2K-PNG.zip
+Hexfront key:      terrain_wet_mud_stones
+Godot normal map:  normal_gl.png

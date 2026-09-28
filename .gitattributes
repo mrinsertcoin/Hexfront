@@ -5,3 +5,6 @@
 assets/LS_spider.glb filter=lfs diff=lfs merge=lfs -text
 assets/LS_ant_queen.glb filter=lfs diff=lfs merge=lfs -text
 assets/hx_gunner_v1.glb filter=lfs diff=lfs merge=lfs -text
+
+# Authored 2K terrain PBR sources (generated Godot import metadata remains text).
+assets/environment/terrain/materials/**/*.png filter=lfs diff=lfs merge=lfs -text

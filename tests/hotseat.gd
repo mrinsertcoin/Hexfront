@@ -17,6 +17,12 @@ func setup(animated: bool = false, level: int = 3) -> void:
 	board.animate_movement = animated
 	board.subdivision_level = level
 	board.planet_radius = 12.0 * pow(2.0, level - 3)
+	# Headless suites validate material structure and gameplay, not texture
+	# fidelity. Keep their independent processes fast while graphical coverage
+	# continues to exercise the production 512-pixel arrays.
+	if DisplayServer.get_name() == "headless":
+		board.terrain_config = TerrainRenderConfig.new()
+		board.terrain_config.texture_resolution = 32
 	root.add_child(board)
 	board._new_match("Hotseat")
 	board.set_process(false)

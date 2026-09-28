@@ -9,7 +9,9 @@ extends Resource
 @export var normal_maps_enabled: bool = true
 @export_range(0.0, 1.0) var slope_rock_strength: float = 0.65
 @export_range(0.0, 1.0) var wetness_strength: float = 0.35
-@export var texture_resolution: int = 128
+# Authored sources remain 2K. Runtime arrays retain 512 at High and 256 at
+# Medium to keep first-match packing and four arrays practical on RX 590.
+@export var texture_resolution: int = 512
 @export var river_min_width: float = 0.035
 @export var river_max_width: float = 0.16
 @export var water_offset: float = 0.035
