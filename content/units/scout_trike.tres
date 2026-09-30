@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "scout_trike"
+display_name = "Scout Trike"
+max_hp = 7
+movement = 4
+attack_range = 1
+attack_damage = 2
+costs = {"food": 1, "materials": 3}
+upkeep = {"food": 1}
+corpse_food_value = 2
+tags = PackedStringArray("vehicle", "reconnaissance", "spotter", "disease_susceptible")
+vision_range = 4
+detection_range = 3
+visual_id = "scout_trike"

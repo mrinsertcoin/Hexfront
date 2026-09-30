@@ -1,4 +1,0 @@
-﻿Original material: Ground082S
-Original archive:  Ground082S_2K-PNG.zip
-Hexfront key:      terrain_forest_woody_debris
-Godot normal map:  normal_gl.png

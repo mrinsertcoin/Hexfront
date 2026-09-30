@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "ant_queen"
+display_name = "Ant Queen"
+max_hp = 12
+movement = 2
+attack_range = 1
+attack_damage = 2
+costs = {"food": 6, "silk": 2, "synapse": 5}
+upkeep = {"food": 2, "silk": 1}
+turn_production = {"food": 1}
+corpse_food_value = 5
+tags = PackedStringArray("ant", "hero", "road_bound", "queen_connection_source", "connection_independent", "morale_immune", "disease_immune")
+visual_id = "ant_queen"

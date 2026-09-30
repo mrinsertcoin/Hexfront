@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="TechnologyDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/technology_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "lm_symbiotic_foundations"
+display_name = "Symbiotic Foundations (Provisional)"
+description = "Development root for research and the first mite disease."
+research_cost = 4
+unlock_tags = PackedStringArray("disease_tracking", "nursery_improvements")

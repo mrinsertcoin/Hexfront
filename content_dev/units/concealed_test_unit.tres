@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "concealed_test_unit"
+display_name = "Concealed Test Unit"
+description = "Test-only ordinary unit used to verify detection boundaries."
+max_hp = 5
+movement = 2
+attack_range = 1
+attack_damage = 1
+vision_range = 2
+concealed = true
+tags = PackedStringArray("test_only", "concealed")

@@ -5,29 +5,15 @@ func _run() -> void:
 	var renderer: PlanetTerrainRenderer=board.terrain_renderer
 	var fingerprint: String=board.generated_planet.generation_fingerprint
 	var terrain_material: ShaderMaterial=renderer.chunks[0].material_override
-	for parameter: String in ["ground_maps","normal_maps","detail_maps","detail_normal_maps"]:
-		var texture_array:=terrain_material.get_shader_parameter(parameter) as Texture2DArray
-		check(texture_array!=null and texture_array.get_layers()==5,"PBR array %s keeps five continuous biome layers" % parameter)
-		check(texture_array!=null and texture_array.get_width()==board.terrain_config.texture_resolution,"PBR array %s uses configured runtime resolution" % parameter)
-	var canonical: Array[String]=[
-		"terrain_grass_lush","terrain_forest_moss","terrain_forest_leaf_litter",
-		"terrain_forest_woody_debris","overlay_forest_scattered_leaves","terrain_dry_sand",
-		"terrain_dry_stony_soil","terrain_wet_mud_stones","terrain_rock_coarse_gravel",
-		"terrain_rock_pebble_gravel","terrain_rock_layered_stone"]
-	for material_id: String in canonical:
-		var texture_set:=TerrainTextureSet.from_folder(material_id)
-		check(texture_set.albedo!=null and texture_set.normal_gl!=null and texture_set.roughness!=null
-			and texture_set.ambient_occlusion!=null and texture_set.height!=null,
-			"Canonical PBR set loads all supplied maps: "+material_id)
-	var fallback_config:=TerrainRenderConfig.new()
-	fallback_config.texture_resolution=4
-	fallback_config.materials=[]
-	for biome_id: String in TerrainMaterialLibrary.IDS:
-		var missing_layer:=BiomeMaterialDefinition.new()
-		missing_layer.biome_id=biome_id
-		missing_layer.primary=TerrainTextureSet.new()
-		fallback_config.materials.append(missing_layer)
-	check(TerrainMaterialLibrary.build(fallback_config)!=null,"Missing PBR maps build neutral fallback material")
+	check(terrain_material!=null and terrain_material.get_meta("terrain_pipeline")=="stylized_palette_v1",
+		"Stylized palette is the single active terrain material")
+	check(terrain_material.shader!=null and not terrain_material.shader.code.contains("sampler2DArray"),
+		"Active terrain shader has no scanned texture-array path")
+	var palette: PackedColorArray=terrain_material.get_shader_parameter("biome_colors")
+	check(palette.size()==5 and palette==board.terrain_config.biome_colors,
+		"Five continuous biome fields bind the configured stylized palette")
+	check(terrain_material.get_shader_parameter("macro_strength")==board.terrain_config.macro_strength,
+		"Restrained macro variation is configured")
 	check(renderer.faces.size()==20*int(pow(4,board.terrain_config.terrain_subdivision_level)), "Visual resolution has independent triangle count")
 	check(renderer.vertices.size()>board.grid.cells.size()*10, "Visual vertices independent of cell count")
 	var edges: Dictionary={}

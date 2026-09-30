@@ -1,6 +1,6 @@
 # Hexfront
 
-Godot **4.6.2 standard**, typed GDScript, **Compatibility** renderer. Milestones **8D–10** provide displaced continuous terrain, a surface-relative tactical camera, and a main-menu/setup/options flow backed by explicit session configuration. Gameplay still uses the stable hex/pentagon cell graph.
+Godot **4.6.2 standard**, typed GDScript, **Compatibility** renderer. Milestones **8D–18** provide displaced terrain, deterministic world dressing, a surface-relative tactical camera, a persistent frontend, data-driven gameplay content, two asymmetric factions, world population, team-shared spherical fog of war, and host-authoritative ENet multiplayer. Gameplay still uses the stable hex/pentagon cell graph.
 
 The default planet is mostly land. Five replaceable placeholder material layers demonstrate the PBR pipeline; final scanned textures and vegetation are future work. Terrain changes presentation only: movement, combat, recruitment, AI, economy, and victory retain their existing rules.
 
@@ -15,6 +15,8 @@ $godotExecutable = 'C:\Users\linus\Downloads\Godot_v4.6.2-stable_win64.exe\Godot
 
 The project opens at the Main Menu. **New Game** configures factions, Human/AI control, planet size, and seed before creating the match. Small (2,562 cells) is the default; Medium has 10,242 cells. **Escape** opens Pause during play, with Resume, shared Options, Main Menu, and desktop exit.
 
+One application-level [`MusicManager`](scripts/audio/music_manager.gd) plays The Uncharted Atlas throughout frontend navigation and crossfades over two seconds to the configured local faction theme when a match starts. Current `Blue` and `Red` faction identities map to the Swarm and Builders themes through [`MusicTrackRegistry`](scripts/audio/music_track_registry.gd). Pause and pause-options leave match music continuous; returning to Main Menu restores the title theme. Master and Music volume use separate buses and persist in `user://hexfront.cfg`.
+
 - **Left click/release:** select a cell, unit or HQ; entities smoothly focus and link follow. **Left drag:** grab the terrain and pan (five-pixel threshold). Click empty background or press **Escape** to clear selection.
 - **Right click:** move to a green cell, or attack a purple enemy target. Hover previews the cyan shortest path or damage, remaining HP and lethality.
 - **HQ recruitment:** select your HQ, choose a unit, then left-click a green adjacent cell. Right-click/Escape cancels without spending.
@@ -25,6 +27,8 @@ The project opens at the Main Menu. **New Game** configures factions, Human/AI c
 - **F6:** procedural-world panel with seed controls, summary, debug-view selector, and selected/hovered-cell diagnostics. **F7:** cycle base fields, biomes, strategic regions, flow direction, accumulation, drainage basins, lakes, rivers, hydrology moisture, and wetland potential.
 - **F8:** toggle camera diagnostics.
 - **End Turn:** pass control. Disabled during movement, AI work, and after victory. Camera and inspection remain available.
+- **R / P:** open Research or focus the selected entity's production/context actions. **Tab / Shift+Tab:** cycle active units. **Enter:** end turn.
+- **Targeting modes:** road, Pillar/bridge, heal, repair, designate, and recruitment show distinct legal-cell overlays. Right-click or **Escape** cancels the mode before Escape opens Pause.
 - **Restart:** shown after victory. Restores initial units, HP, actions, economy, selection and camera, retaining the match mode and the same cached topology. Mode buttons also start a new match.
 
 Gold marks selection, green movement/recruitment, cyan paths, purple attacks, and gray hover. Blue/red rings mark ownership. Health bars are world geometry and are occluded by the planet. HUD controls consume their clicks; pan to expose areas covered by the HUD.
@@ -44,6 +48,26 @@ Gold marks selection, green movement/recruitment, cyan paths, purple attacks, an
 - [`EntityView`](scripts/view/entity_view.gd) follows the accepted `Array[int]` path with spherical interpolation. Orientation parallel-transports and smoothly turns the heading while keeping local up radial. Long frames consume each waypoint in order. `TerrainSurfaceSampler.sample_position(direction, offset)` now supplies displaced terrain height for movement, structures, selection overlays, grid lines, and labels. In-place rig animation remains separate from displacement.
 
 The terrain mesh is presentation, independent of logical cell polygons. [`GeneratedPlanet`](scripts/world/generated_planet.gd) owns a frozen configuration snapshot, per-cell generated records, region metadata, continuous samplers, validation results, and a deterministic fingerprint. [`PlanetFieldSampler`](scripts/world/planet_field_sampler.gd) samples explicit-seed `FastNoiseLite` layers in normalized 3D direction space, so generation has no longitude seam or scene-tree dependency. Gameplay reads none of these values yet.
+
+## Gameplay content foundation
+
+[`ContentRegistry`](scripts/content/content_registry.gd) discovers sorted typed definitions under `content/`, validates their stable lowercase IDs and references, and produces a gameplay-only fingerprint. Units, structures, factions, resources, technologies, neutral groups, modifiers, and world sites resolve through this registry. Prototype Blue and Red content retains the prior balance while runtime entities store definition and controller IDs suitable for later serialization.
+
+[`PlayerState`](scripts/core/player_state.gd) owns resources and research. Controller and relationship state distinguishes human, player-AI, neutral-AI, and world identities and supports self, allied, neutral, and hostile relationships. Movement, combat, recruitment, research, and site rules sit behind the existing `GameRules` facade; combat and AI now consult relationships, and all occupancy uses one query covering units, structures, and blocking sites.
+
+The deterministic world-population layer can create logical site records after planet generation, using its own version and semantic seed streams. It is disabled in production matches. The authored `trade_post` proves the generic site path without adding trade mechanics, and development-only technology and neutral-group examples remain under `content_dev/`. See [content authoring](docs/Content_Authoring.md) for exact schemas and locations.
+
+The selectable **Living Migration** faction uses Food, Silk, and Synapse; mobile Spider headquarters; internal nursery production; terrain consumption and regrowth; ant roads and Connection; finite-lifetime marsh creatures; nutrient-driven caterpillar transformation; and three temporary mite diseases. Its values are visible, data-driven development defaults. See [Milestone 14A](docs/Milestone_14A_Living_Migration.md) for the source-defined rules, provisional tuning, controls, and deferred mechanics.
+
+The selectable **Baumeister** faction uses Food, Materials, Energy, and Unity to build local-Integrity Pillar Cities, owned districts, and damageable bridge supply networks. It includes weighted bridge movement, specialized biological/vehicle support, deployable artillery, target designation, and a legal development AI. See [Milestone 14B](docs/Milestone_14B_Baumeister.md).
+
+The in-match [strategic interface](docs/Strategic_UI.md) presents faction-defined resources, authoritative production reasons, a reusable research tree, context actions, Spider/Pillar management, world-site inspection, interaction modes, and focusable notifications. Its state is rebuilt from the current match and is never serialized as gameplay.
+
+[World population](docs/World_Population.md) is a separately versioned deterministic layer over the generated planet. Match setup offers Off/Sparse/Standard/Dense density; Standard places region-aware trade posts, finite and renewable resource sites, one-shot guarded ruins, peaceful grazers, hostile predators, and ruin guardians outside safe starts. Generic site rules provide faction-compatible fixed trade, gathering, and exploration, followed by a bounded neutral phase after all players.
+
+[Fog of war](docs/Fog_of_War.md) derives packed unexplored/explored/visible masks, detached current observations, immutable last-known contacts, site memory, concealment detection, Tracking reveal, and team-shared spotting from authoritative state. The spherical overlay, entity/site filtering, hotseat privacy handoff, and player AI all consume the same permitted observation.
+
+[Multiplayer](docs/Multiplayer_Architecture.md) adds a configurable ENet host/join flow, a four-player-ready peer/player registry and development lobby, compatibility handshakes, exact-once primitive commands, host-only simulation, private population seeding, per-recipient observation snapshots, revision/resynchronization handling, and predictable disconnect cleanup. Two-player localhost integration launches independent Godot processes; the document includes the separate two-computer Windows procedure and current development-client limitations.
 
 Height combines continent, regional, and detail scales plus explicit sphere-space domain warp. Temperature combines latitude, coherent noise, and elevation cooling. Moisture is coherent 3D noise; fertility combines temperature, moisture, height, and local variation; terrain roughness measures a dedicated coherent field. Five data-defined [`BiomeDefinition`](scripts/world/biome_definition.gd) resources score those fields continuously, and every cell retains normalized weights alongside its dominant biome. Regions grow deterministically across grid adjacency from farthest-point seeds; undersized regions merge by shared border and stable tie-breaks, then cache aggregate field and biome values.
 
@@ -86,7 +110,9 @@ Terrain vertices sample the canonical generated height field and use `radius + (
 
 `GeneratedPlanet.sample_fields()` and `sample_biome_weights()` now continuously interpolate cached hydrology influence over the primal spherical triangles before applying the existing biome scorer. Base climate remains unchanged. This makes wetland transitions and effective moisture agree with cell data while avoiding nearest-cell material boundaries.
 
-[`BiomeMaterialDefinition`](scripts/view/biome_material_definition.gd) resources provide albedo, normal, roughness, tint, world-space repeat scale, and detail strengths for Grassland, Forest, Dryland, Rocky, and Wetland. Seam-free triplanar projection blends these maps using continuous weights. Roughness is packed with albedo to reduce samples. Normal maps are projected into the local tangent planes without global UVs or fragile UV tangents. Actual surface slope and existing roughness expose rock; moisture and wetland potential darken ground and mildly reduce roughness. Subtle stable macro variation reduces repetition. See [texture setup and import guidance](assets/terrain/README.md).
+[`StylizedTerrainMaterial`](scripts/view/stylized_terrain_material.gd) binds five continuous biome fields to a restrained natural palette. The active shader uses broad color regions, low-frequency object-space variation, real-surface slope rock tint, and hydrology darkening without scanned maps or runtime texture arrays. See [terrain material notes](assets/terrain/README.md).
+
+[`WorldDressing`](scripts/view/world_dressing.gd) composes deterministic forest groves, grassland copses, rock fields, wetland growth, and dryland scrub from continuous environmental fields. Eight reviewed Meshy assets use their explicit tactical, regional, and strategic LODs in 24 bounded MultiMesh batches; planet view hides all props. Each member samples displaced terrain and normals, while opening units and headquarters receive presentation-only clearings. [The runtime catalog](assets/environment/stylized/README.md) records accepted and rejected candidates.
 
 River ribbons follow the authoritative directed segments using constrained spherical Hermite smoothing, dense height samples, hydrology-scaled widths, and overlapping junction patches. Lakes merge logical membership into rounded external contours, triangulate a common authoritative water radius, and add a narrow damp shoreline. Both use opaque restrained water materials for reliable depth occlusion. Water animation and channel carving are deferred; no authoritative height or drainage data is changed.
 
@@ -118,25 +144,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/run_all.ps1
 # Production terrain QA at both supported development sizes:
 & $godotExecutable --path . --script res://tests/terrain_graphical.gd --quit-after 3500
 & $godotExecutable --path . --script res://tests/terrain_graphical.gd --quit-after 3500 -- --dense
+& $godotExecutable --path . --script res://tests/terrain_graphical.gd --quit-after 3500 -- --medium
 # Full mouse-routed battle and movement/rig suites can also run graphically:
 & $godotExecutable --path . --script res://tests/combat_ui.gd --quit-after 5000
 & $godotExecutable --path . --script res://tests/animation.gd --quit-after 5000
 ```
 
-The runner imports/parses first, then runs **18 headless suites**: topology, procedural world, controlled/generated hydrology, world UI, terrain geometry/picking, globe picking/transforms, surface camera/navigation, frontend/session flow and real-callback navigation, movement, hotseat, combat, combat UI, economy, economy UI, AI, resources, and animation. It rejects script/engine errors, leaked objects, missing completion markers and nonzero failures, even if Godot returns exit code 0. Logs are saved under `.godot/10_*.log`.
+The runner imports/parses first, then runs **30 headless suites** plus a real two-process ENet integration, including dedicated multiplayer, visibility, Living Migration, Baumeister, strategic UI, and world-population coverage; content-foundation, world-interaction, world-dressing determinism, placement, slope/water exclusion, LOD, density, fallback, and gameplay-isolation checks. It rejects script/engine errors, missing completion markers and nonzero failures, even if Godot returns exit code 0. Logs are saved under `.godot/10_*.log`.
 
 Coverage includes all six topology subdivision counts and generated worlds at levels 0 through 4; deterministic serialization and fingerprints, independent sub-seeds, seam continuity, latitude and elevation effects, normalized biome blends, connected regions and deterministic cleanup; plus adjacency, pathfinding, picking, movement, combat, economy, AI, restart, and rig tracks. The procedural suite performs 80,371 checks at the default seed.
 
-Graphical smoke covers procedural debug modes, seed identity, gameplay, navigation, AI, and far-side depth occlusion. `terrain_graphical.gd` captures production terrain at close/medium distances and both poles for three seeds; it checks production pixel identity, wetness/rock effects, and records frame timing and draw calls. `frontend_graphical.gd` captures the full menu/setup/options/pause flow. See [the 8D delivery report](docs/Milestone_8D_Continuous_Terrain.md) for terrain results.
+Graphical smoke covers procedural debug modes, seed identity, gameplay, navigation, AI, and far-side depth occlusion. `terrain_graphical.gd` captures production terrain, all five biome targets at tactical/regional distances, both poles, and lakes for three seeds; it checks production pixel identity, wetness/rock effects, and records frame timing, draw calls, dressing counts, and build time. See [the world-dressing report](docs/Milestone_11_PBR_and_World_Dressing.md) for results.
 
 Physical mouse/keyboard feel remains a manual check; automated UI tests inject actual viewport events. To repeat manually: launch a Small match, select and move a Scout, pan during movement, focus an HQ and recruit, navigate to the opposite hemisphere, try close and whole-planet zoom, pause/resume, return to Main Menu, and start another match. For a complete scripted battle, run `combat_ui.gd` above.
 
 ## Limits and next milestone
 
-The renderer is a single-valued radial height surface with static chunks. Textures are replaceable placeholders; vegetation, erosion, channel carving, animated water, resource placement, terrain gameplay effects, and dynamic LOD remain future work. Large structures use their host-cell height without flattening the ground beneath their footprint.
+The renderer is a single-valued radial height surface with static chunks. Erosion, channel carving, animated water, terrain gameplay effects, and terrain-mesh LOD remain future work. Large structures use their host-cell height without flattening the ground beneath their footprint.
 
 Milestone 9 is implemented by [`SurfaceCamera`](scripts/view/surface_camera.gd) and [`TacticalCameraConfig`](scripts/view/tactical_camera_config.gd). See [the camera report](docs/Milestone_9_Surface_Camera.md) for framing choices, follow, antipodal travel, verification, and limits. Run `camera_navigation.gd` without `--headless` for graphical camera checks; add `-- --dense` for radius 24.
 
 Milestone 10 is implemented by [`AppController`](scripts/app/app_controller.gd), [`MatchConfig`](scripts/app/match_config.gd), and [`UserSettings`](scripts/app/user_settings.gd). See [the frontend report](docs/Milestone_10_Frontend.md) for navigation, size mappings, persistence, verification, and current limits.
 
-Other documentation: [8B delivery](docs/Milestone_8B_Procedural_Planet.md), [8A recovery](docs/Milestone_8A_Recovery.md), [design brief](docs/Faction_Brief_and_Day_One_Plan.md), [asset contract](assets/ASSET_CONTRACT.md), [movement/rig integration](docs/Movement_and_Rig_Integration.md), [earlier review](docs/Code_Review_2026-09-26.md). This workspace has no Git metadata; the pre-8B baseline is preserved in `.godot/pre_8b.zip`, and the previously supplied flat-test archive remains in `tests/legacy_flat_snapshot.zip`.
+Other documentation: [content authoring](docs/Content_Authoring.md), [8B delivery](docs/Milestone_8B_Procedural_Planet.md), [8A recovery](docs/Milestone_8A_Recovery.md), [design brief](docs/Faction_Brief_and_Day_One_Plan.md), [asset contract](assets/ASSET_CONTRACT.md), [movement/rig integration](docs/Movement_and_Rig_Integration.md), and [earlier review](docs/Code_Review_2026-09-26.md).

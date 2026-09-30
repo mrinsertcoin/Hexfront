@@ -1,0 +1,45 @@
+[gd_resource type="Resource" script_class="FactionDefinition" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/faction_definition.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/content/living_migration_config.gd" id="2"]
+
+[sub_resource type="Resource" id="LivingMigrationConfig_main"]
+script = ExtResource("2")
+internal_slot_count = 9
+nursery_slot_count = 9
+spider_food_production = 3
+spider_silk_production = 2
+terrain_food_yield = 4
+terrain_regrowth_turns = 3
+caterpillar_nutrients_per_harvest = 2
+spider_base_silk_cost = 10
+spider_silk_cost_per_owned = 5
+spider_construction_turns = 2
+internal_construction_turns = 2
+internal_building_food_cost = 3
+mite_production_interval = 3
+improved_mite_interval = 2
+ant_hill_connection_range = 2
+queen_connection_range = 2
+road_segments_per_turn = 3
+road_food_cost_per_cell = 0
+disconnection_limit = 2
+research_per_building = 1
+food_per_food_building = 2
+synapse_per_synapse_building = 1
+starting_nursery_branch = "ant_hill"
+
+[resource]
+script = ExtResource("1")
+id = "living_migration"
+display_name = "The Living Migration"
+description = "A mobile symbiotic ecosystem with biological production timelines, terrain consumption and ant Connection networks."
+resource_ids = PackedStringArray("food", "silk", "synapse")
+unit_roster_ids = PackedStringArray("living_spider", "mite", "worker_ant", "fighter_ant", "fire_ant", "ant_queen", "dragonfly", "mosquito", "poison_dart_frog", "bullfrog", "unke", "living_caterpillar", "brimstone_butterfly", "fire_moth", "admiral")
+starting_resources = {"food": 20, "silk": 8, "synapse": 5}
+turn_resource_income = {}
+starting_unit_ids = PackedStringArray("living_spider", "worker_ant", "mite")
+technology_ids = PackedStringArray("lm_symbiotic_foundations", "lm_ant_adaptation", "lm_marsh_metabolism", "lm_metamorphosis", "lm_virulence", "lm_migration_efficiency")
+visual_theme_id = "living_migration"
+music_id = "swarm"
+gameplay_config = SubResource("LivingMigrationConfig_main")

@@ -7,10 +7,12 @@ var storage_path: String = PATH
 var fullscreen: bool = false
 var vsync: bool = true
 var master_volume_db: float = 0.0
+var music_volume_db: float = -6.0
 var orbit_sensitivity: float = 0.25
 var zoom_response: float = 1.16
 var drag_threshold: float = 5.0
 var terrain_quality: String = "High"
+var ui_scale: float = 1.0
 
 func load_from_disk() -> void:
 	var file := ConfigFile.new()
@@ -18,10 +20,12 @@ func load_from_disk() -> void:
 	fullscreen = bool(file.get_value("display", "fullscreen", fullscreen))
 	vsync = bool(file.get_value("display", "vsync", vsync))
 	master_volume_db = clampf(float(file.get_value("audio", "master_volume_db", master_volume_db)), -40.0, 6.0)
+	music_volume_db = clampf(float(file.get_value("audio", "music_volume_db", music_volume_db)), -40.0, 6.0)
 	orbit_sensitivity = clampf(float(file.get_value("camera", "orbit_sensitivity", orbit_sensitivity)), 0.05, 1.0)
 	zoom_response = clampf(float(file.get_value("camera", "zoom_response", zoom_response)), 1.02, 1.5)
 	drag_threshold = clampf(float(file.get_value("camera", "drag_threshold", drag_threshold)), 2.0, 12.0)
 	terrain_quality = str(file.get_value("graphics", "terrain_quality", terrain_quality))
+	ui_scale=clampf(float(file.get_value("interface","ui_scale",ui_scale)),0.8,1.4)
 	if terrain_quality not in ["Medium", "High"]: terrain_quality = "High"
 
 func save_to_disk() -> Error:
@@ -29,10 +33,12 @@ func save_to_disk() -> Error:
 	file.set_value("display", "fullscreen", fullscreen)
 	file.set_value("display", "vsync", vsync)
 	file.set_value("audio", "master_volume_db", master_volume_db)
+	file.set_value("audio", "music_volume_db", music_volume_db)
 	file.set_value("camera", "orbit_sensitivity", orbit_sensitivity)
 	file.set_value("camera", "zoom_response", zoom_response)
 	file.set_value("camera", "drag_threshold", drag_threshold)
 	file.set_value("graphics", "terrain_quality", terrain_quality)
+	file.set_value("interface","ui_scale",ui_scale)
 	return file.save(storage_path)
 
 func apply_global() -> void:
@@ -40,6 +46,7 @@ func apply_global() -> void:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
 	AudioServer.set_bus_volume_db(0, master_volume_db)
+	AudioServer.set_bus_volume_db(MusicManager.ensure_music_bus(),music_volume_db)
 
 func camera_configuration() -> TacticalCameraConfig:
 	var result := TacticalCameraConfig.new()
@@ -50,6 +57,3 @@ func camera_configuration() -> TacticalCameraConfig:
 
 func terrain_subdivision() -> int:
 	return 4 if terrain_quality == "Medium" else 5
-
-func terrain_texture_resolution() -> int:
-	return 256 if terrain_quality == "Medium" else 512

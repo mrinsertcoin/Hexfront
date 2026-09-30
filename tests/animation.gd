@@ -35,8 +35,8 @@ func _run() -> void:
 	check(TestState.snapshot(board.game_state) == committed, "Extra move, attack, recruitment, and end-turn requests cannot overlap playback")
 	check(board.feedback_label.text.contains("finish"), "Busy input has readable feedback")
 	board.clear_selection()
-	board.select_at(_screen(board.game_state.units[3].cell_id))
-	check(board.selected_unit_id == 3 and view.moving and view.position == start, "Inspection and redraw preserve ongoing playback")
+	board.select_at(_screen(board.game_state.units[2].cell_id))
+	check(board.selected_unit_id == 2 and view.moving and view.position == start, "Permitted inspection and redraw preserve ongoing playback")
 	view.advance_movement(0.1)
 	check(view.position != start and view.position != view.destination, "Visual progresses between tiles")
 	var intermediate: Vector3 = view.position

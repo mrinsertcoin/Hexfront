@@ -52,6 +52,10 @@ func _run() -> void:
 	await process_frame
 	check(is_instance_valid(app) and app.screen_name == "game" and app.board != null, "Start callback creates first match")
 	var first_board := app.board
+	app.board._set_input_mode(StrategicInputMode.Kind.ROAD,app.board.game_state.units.keys()[0])
+	_escape()
+	await process_frame
+	check(app.screen_name=="game" and not app.board.has_active_input_mode() and not paused,"Escape cancels board interaction mode before Pause")
 	_escape()
 	await process_frame
 	check(app.screen_name == "pause" and paused, "Escape callback opens pause")

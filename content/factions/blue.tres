@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="FactionDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/faction_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "blue"
+display_name = "Blue"
+description = "Prototype Blue faction."
+resource_ids = PackedStringArray("materials")
+unit_roster_ids = PackedStringArray("prototype_infantry", "prototype_scout", "prototype_gunner")
+structure_roster_ids = PackedStringArray("prototype_headquarters")
+starting_resources = {"materials": 8}
+turn_resource_income = {"materials": 3}
+starting_unit_ids = PackedStringArray("prototype_infantry", "prototype_scout", "prototype_gunner")
+starting_structure_ids = PackedStringArray("prototype_headquarters")
+visual_theme_id = "blue"
+music_id = "swarm"

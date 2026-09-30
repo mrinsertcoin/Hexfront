@@ -4,7 +4,9 @@ var route: Array[int] = []
 
 func _next_round() -> void:
 	click(board.end_turn_button.get_global_rect().get_center())
+	if board.privacy_overlay.visible: board._dismiss_privacy()
 	click(board.end_turn_button.get_global_rect().get_center())
+	if board.privacy_overlay.visible: board._dismiss_privacy()
 
 func _hover(hex: int) -> void:
 	# Exercise the same hover projection/query as the per-frame mouse handler.
@@ -25,6 +27,7 @@ func _fixture() -> void:
 		view.queue_free()
 	board.unit_views.clear()
 	board.health_fills.clear()
+	board.game_state.visibility_system.reset(); board.game_state.refresh_visibility()
 	board.clear_selection()
 
 func _check_fresh() -> void:
@@ -83,14 +86,16 @@ func _run() -> void:
 	_hover(board.game_state.units[3].cell_id)
 	check(board.attack_preview_label.text.is_empty(), "No actionable preview outside range")
 	click(_screen(board.game_state.units[3].cell_id), MOUSE_BUTTON_RIGHT)
-	check(board.selected_unit_id == 1 and not board.game_state.units[1].attacked and board.feedback_label.text.contains("out of range"), "Invalid attack preserves selection and actions")
+	check(board.selected_unit_id == 1 and not board.game_state.units[1].attacked and not board.game_state.visibility_system.observation_for_controller(1).visible_entities.has(3), "Hidden enemy input preserves selection and actions without exposing a target")
 
 	_fixture()
 	await process_frame
 	board.focus_cell(route[0], true)
 	var bar_position: Vector3 = board.health_fills[1].global_position
-	click(board.camera.unproject_position(bar_position))
-	check(board.selected_unit_id == 1, "Health bar does not obstruct tile picking")
+	var bar_screen:=board.camera.unproject_position(bar_position)
+	check(board.pick_selectable_cell(bar_screen)==route[0],"Health bar does not obstruct tile picking")
+	board.select_at(bar_screen)
+	check(board.selected_unit_id == 1,"Health-bar ray selects its observed unit")
 	_hover(route[2])
 	check(board.attack_tiles.has(route[2]) and board.tiles[route[2]].material_override == board.attack_material, "Enemy gets distinct attack highlight")
 	check(board.attack_preview_label.text.contains("HP 6 -> 3") and board.attack_preview_label.text.contains("survives"), "Enemy hover shows damage and remaining HP")
@@ -125,6 +130,7 @@ func _run() -> void:
 	_next_round()
 	board.game_state.structures[101].cell_id = route[1]
 	board.game_state.structures[101].hp = 1
+	board.game_state.refresh_visibility()
 	board._refresh_display()
 	click(_screen(route[0]))
 	_hover(route[1])
@@ -139,6 +145,8 @@ func _run() -> void:
 	click(_screen(route[3]), MOUSE_BUTTON_RIGHT)
 	check(board.game_state.units[2].cell_id == route[2], "Right-click actions disabled after victory")
 	await _capture("milestone3_victory")
+	# Dynamic strategic containers settle their minimum sizes on the next frame.
+	await process_frame
 	board.camera.position += Vector3(2, 0, 1)
 	board.camera.size = 12.0
 	click(board.restart_button.get_global_rect().get_center())

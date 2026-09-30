@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="TechnologyDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/technology_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "bm_deployed_artillery"
+display_name = "Deployed Artillery (Provisional)"
+research_cost = 6
+prerequisite_ids = PackedStringArray("bm_armored_fabrication")
+unlock_unit_ids = PackedStringArray("long_range_tank")
+unlock_tags = PackedStringArray("artillery_production")

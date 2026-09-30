@@ -22,7 +22,6 @@ func setup(animated: bool = false, level: int = 3) -> void:
 	# continues to exercise the production 512-pixel arrays.
 	if DisplayServer.get_name() == "headless":
 		board.terrain_config = TerrainRenderConfig.new()
-		board.terrain_config.texture_resolution = 32
 	root.add_child(board)
 	board._new_match("Hotseat")
 	board.set_process(false)
@@ -67,6 +66,10 @@ func _run() -> void:
 	check(board.unit_views.size() == 8, "Six units and two HQ views")
 	check(board.unit_views[1].get_node("visual_root/ModelRoot").get_child_count() == 1, "One imported model per wrapper")
 	for player in [1, 2]:
+		if board.privacy_overlay.visible:
+			check(board.selected_unit_id==-1 and board.notification_feed.records.is_empty(),"Hotseat handoff clears private selection and notifications")
+			click(board.privacy_overlay.get_node("PrivacyCenter/PrivacyColumn/ReadyButton").get_global_rect().get_center())
+			check(not board.privacy_overlay.visible,"Incoming player explicitly reveals their perspective")
 		var ids: Array = [1, 2] if player == 1 else [3, 4]
 		for id: int in ids:
 			click(_screen(board.game_state.units[id].cell_id))
@@ -86,13 +89,14 @@ func _run() -> void:
 		if player == 1:
 			var enemy_start: int = board.game_state.units[3].cell_id
 			click(_screen(enemy_start))
-			check(board.selected_unit_id == 3 and board.unit_label.text.contains("inspection only") and board.reachable_tiles.is_empty(), "Enemy inspection")
+			check(board.selected_unit_id == -1 and not board.unit_views[3].visible, "Hidden enemy cannot be selected or rendered")
 			click(_screen(board.grid.get_neighbors(enemy_start)[-1]), MOUSE_BUTTON_RIGHT)
 			check(board.game_state.units[3].cell_id == enemy_start, "Cannot move enemy")
 			keypress(KEY_ESCAPE)
 			check(board.selected == board.NONE and board.selected_unit_id == -1, "Escape clears selection")
 		click(board.end_turn_button.get_global_rect().get_center())
-		check(board.selected == board.NONE and board.game_state.active_player == 3 - player, "End turn passes control and clears selection")
+		check(board.selected == board.NONE and board.game_state.active_player == 3 - player and board.privacy_overlay.visible, "End turn passes control behind a privacy handoff")
+	if board.privacy_overlay.visible: click(board.privacy_overlay.get_node("PrivacyCenter/PrivacyColumn/ReadyButton").get_global_rect().get_center())
 	check(board.game_state.round_number == 2 and not board.game_state.units[1].moved and not board.game_state.units[2].moved, "Full round restores actions")
 	click(_screen(board.game_state.units[1].cell_id))
 	var selected: int = board.selected

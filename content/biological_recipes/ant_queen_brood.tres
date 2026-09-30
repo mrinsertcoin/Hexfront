@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BiologicalRecipeDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/biological_recipe_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "ant_queen_brood"
+display_name = "Ant Queen Brood"
+branch_id = "ant_hill"
+costs = {"food": 6, "silk": 2, "synapse": 5}
+development_turns = 3
+outcome_unit_ids = PackedStringArray("ant_queen")

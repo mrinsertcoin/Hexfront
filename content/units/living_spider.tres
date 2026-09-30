@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "living_spider"
+display_name = "Living Spider"
+description = "Mobile headquarters with nine internal slots."
+max_hp = 25
+movement = 4
+attack_range = 1
+attack_damage = 2
+costs = {"silk": 10}
+upkeep = {"food": 2}
+turn_production = {"synapse": 1}
+corpse_food_value = 6
+tags = PackedStringArray("headquarters", "victory_objective", "mobile_headquarters", "synaptic", "terrain_harvester", "morale_immune", "disease_immune", "ignores_integrity")
+visual_id = "living_spider"

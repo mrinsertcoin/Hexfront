@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="TechnologyDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/technology_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "bm_armored_fabrication"
+display_name = "Armored Fabrication (Provisional)"
+research_cost = 5
+prerequisite_ids = PackedStringArray("bm_industrial_foundations")
+unlock_unit_ids = PackedStringArray("assault_tank")
+unlock_tags = PackedStringArray("vehicle_armor")

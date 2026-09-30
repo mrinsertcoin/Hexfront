@@ -1,4 +1,0 @@
-﻿Original material: Ground023
-Original archive:  Ground023_2K-PNG.zip
-Hexfront key:      terrain_forest_leaf_litter
-Godot normal map:  normal_gl.png

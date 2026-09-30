@@ -27,7 +27,9 @@ func _run() -> void:
 	state.start_turn()
 	rules._start_turn()
 	check(Snapshot.snapshot(state) == initial, "Turn-start effects are idempotent")
-	for kind: String in UnitTypes.COSTS:
+	for unit_id: String in UnitTypes.IDS:
+		var kind:=state.registry.unit(unit_id).display_name
+		var cost: int=state.registry.unit(unit_id).costs["materials"]
 		rules.restart_match()
 		var id: int = state.next_id
 		var before_query: String = Snapshot.snapshot(state)
@@ -35,16 +37,16 @@ func _run() -> void:
 		check(Snapshot.snapshot(state) == before_query, "Recruit query is side-effect free")
 		check(rules.try_recruit(1, 100, kind, spawn_cell(state)).success, "Recruit each unit type")
 		check(state.units[id].hp == state.units[id].max_hp and state.units[id].ready_next_turn, "Recruit arrives at full HP, ready next turn")
-		check(state.materials[1] == 11 - int(UnitTypes.COSTS[kind]) and not state.structures[100].recruit_available, "Deduct exact centralized cost and consume allowance")
+		check(state.players[1].resource_amount("materials")==11-cost and not state.structures[100].recruit_available, "Deduct exact centralized cost and consume allowance")
 		check(not rules.try_move(1, id, state.grid.get_neighbors(spawn_cell(state))[0]).success, "Recruit cannot move immediately")
 		state.units[3].cell_id = state.grid.get_neighbors(spawn_cell(state))[0]
 		check(not rules.try_attack(1, id, 3).success, "Recruit cannot attack immediately")
 		reject(state, 1, 100, kind, spawn_cell(state))
-		check(rules.try_end_turn(1).success and state.materials[2] == 11, "P2 first income")
+		check(rules.try_end_turn(1).success and state.players[2].resource_amount("materials")==11, "P2 first income")
 		check(state.units[id].ready_next_turn, "Recruit still waits during opponent turn")
 		check(rules.try_end_turn(2).success, "Return to recruiter")
 		check(not state.units[id].ready_next_turn and not state.units[id].moved and not state.units[id].attacked, "Incoming turn restores both recruit actions")
-		check(state.materials[1] == 14 - int(UnitTypes.COSTS[kind]) and state.structures[100].recruit_available, "Income and allowance restored once")
+		check(state.players[1].resource_amount("materials")==14-cost and state.structures[100].recruit_available, "Income and allowance restored once")
 	rules.restart_match()
 	reject(state, 2, 101, "Scout", state.grid.get_neighbors(state.structures[101].cell_id)[3])
 	reject(state, 1, 101, "Scout", state.grid.get_neighbors(state.structures[101].cell_id)[3])
@@ -54,13 +56,13 @@ func _run() -> void:
 	reject(state, 1, 100, "Scout", state.grid.breadth_first(0).order[-2])
 	reject(state, 1, 100, "Scout", state.units[1].cell_id)
 	reject(state, 1, 100, "Scout", state.structures[100].cell_id)
-	state.materials[1] = 0
+	state.players[1].resources["materials"]=0
 	reject(state, 1, 100, "Scout", spawn_cell(state))
 	rules.restart_match()
 	state.structures[100].hp = 0
 	reject(state, 1, 100, "Scout", spawn_cell(state))
 	rules.restart_match()
-	state.structures[100].structure_type = "Depot"
+	state.structures[100].definition_id = "invalid_depot"
 	reject(state, 1, 100, "Scout", spawn_cell(state))
 	rules.restart_match()
 	for hex: int in rules.recruit_destinations(1, 100, "Scout"):
@@ -88,6 +90,7 @@ func _run() -> void:
 		state.units[2] = GameState.Unit.new(2, 3 - winner, "Scout", state.grid.breadth_first(target_hex).order[-1])
 		state.units[4] = GameState.Unit.new(4, winner, "Scout", state.grid.breadth_first(0).order[-2])
 		state.structures[enemy_hq].hp = 1
+		state.refresh_visibility()
 		var before: String = Snapshot.snapshot(state)
 		var preview: GameRules.Result = rules.preview_attack(winner, 1, enemy_hq)
 		check(preview.killed and preview.winner_id == winner and Snapshot.snapshot(state) == before, "HQ lethal preview is pure")

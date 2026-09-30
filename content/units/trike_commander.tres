@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "trike_commander"
+display_name = "Trike Commander"
+max_hp = 12
+movement = 3
+attack_range = 2
+attack_damage = 3
+costs = {"materials": 5, "energy": 3, "unity": 6}
+upkeep = {"food": 1, "unity": 1}
+corpse_food_value = 4
+tags = PackedStringArray("vehicle", "hero", "designator", "coordination", "network_recruitment")
+vision_range = 3
+detection_range = 1
+visual_id = "trike_commander"

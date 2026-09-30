@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "long_range_tank"
+display_name = "Long Range Tank"
+max_hp = 12
+movement = 2
+attack_range = 1
+attack_damage = 2
+deployed_attack_range = 4
+deployed_attack_damage = 5
+costs = {"materials": 9, "energy": 5}
+upkeep = {"materials": 1, "energy": 1}
+tags = PackedStringArray("vehicle", "artillery", "deployable_artillery", "military", "network_recruitment")
+visual_id = "long_range_tank"

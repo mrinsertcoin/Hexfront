@@ -1,4 +1,0 @@
-﻿Original material: Rock051
-Original archive:  Rock051_2K-PNG.zip
-Hexfront key:      terrain_rock_layered_stone
-Godot normal map:  normal_gl.png

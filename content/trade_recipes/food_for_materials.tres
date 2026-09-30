@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TradeRecipeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/trade_recipe_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "food_for_materials"
+display_name = "Supply the Foundry"
+description = "Exchange provisions for Baumeister construction material."
+input_costs = {"food": 4}
+output_rewards = {"materials": 2}
+allowed_faction_ids = PackedStringArray("baumeister")
+usage_limit_per_turn = 1

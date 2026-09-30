@@ -1,4 +1,0 @@
-﻿Original material: Ground081
-Original archive:  Ground081_2K-PNG.zip
-Hexfront key:      terrain_dry_stony_soil
-Godot normal map:  normal_gl.png

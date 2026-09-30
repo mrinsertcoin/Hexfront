@@ -43,8 +43,9 @@ func compare_preview(rules: GameRules, actor: int, attacker: int, target: int) -
 
 func test_ranges() -> void:
 	for start: int in [0, 12, 100]:
-		for kind: String in UnitTypes.STATS:
-			var range_limit: int = int(UnitTypes.STATS[kind]["range"])
+		for unit_id: String in UnitTypes.IDS:
+			var kind:=ContentRegistry.default().unit(unit_id).display_name
+			var range_limit: int=ContentRegistry.default().unit(unit_id).attack_range
 			for cell: int in grid.get_cells_within_distance(start, range_limit + 1):
 				if cell == start:
 					continue
@@ -126,6 +127,7 @@ func test_death_and_victory() -> void:
 		state.units[4].owner_id = winner
 		state.units[2].owner_id = 3 - winner
 		state.units[2].hp = 1
+		state.refresh_visibility()
 		rules = GameRules.new(state)
 		# Eliminating the final enemy unit no longer yields victory while an HQ exists
 		result = compare_preview(rules, winner, 1, 2)
@@ -150,6 +152,7 @@ func test_death_and_victory() -> void:
 	# Enemy headquarters in range and low HP
 	state2.structures.clear()
 	state2.structures[200] = GameState.Structure.new(200, 2, "Headquarters", route[1], 1)
+	state2.refresh_visibility()
 	rules = GameRules.new(state2)
 	var preview_hq: GameRules.Result = rules.preview_attack(1, 1, 200)
 	check(preview_hq.success and preview_hq.killed and preview_hq.winner_id == 1, "Preview shows HQ death declares winner")

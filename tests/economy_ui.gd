@@ -15,13 +15,13 @@ func _run() -> void:
 	for repeat in range(3):
 		board._refresh_display()
 	check(Snapshot.snapshot(board.game_state) == initial, "Redraw grants no income")
-	check(board.materials_label.text.contains("P1 11 | P2 8"), "Both material balances displayed")
+	check(board.materials_label.text.contains("P1 Blue: Materials 11") and not board.materials_label.text.contains("P2 Red"), "Active faction material balance displayed without opponent leakage")
 	click(_screen(board.game_state.structures[100].cell_id))
 	await process_frame
 	check(board.selected_structure_id == 100, "HQ selectable")
 	var button: Button = board.recruit_box.get_node("RecruitScout") as Button
 	click(button.get_global_rect().get_center())
-	check(board.placement_mode and board.recruit_hq_id == 100 and board.recruit_choice == "Scout", "Recruit button enters placement")
+	check(board.placement_mode and board.recruit_hq_id == 100 and board.recruit_choice == "prototype_scout", "Recruit button enters placement")
 	click(_screen(board.grid.get_neighbors(0)[3]), MOUSE_BUTTON_RIGHT)
 	check(not board.placement_mode and Snapshot.snapshot(board.game_state) == initial, "Right-click press/release cancels without attack or charge")
 	check(not board.tiles[board.grid.get_neighbors(0)[3]].visible, "Cancel removes placement highlight")
@@ -31,12 +31,15 @@ func _run() -> void:
 	board._begin_recruit("Scout", 100)
 	var count_before: int = board.game_state.units.size()
 	click(_screen(board.grid.get_neighbors(0)[3]))
-	check(board.game_state.units.size() == count_before + 1 and board.game_state.materials[1] == 8, "One press/release recruits and charges once")
+	check(board.game_state.units.size() == count_before + 1 and board.game_state.players[1].resource_amount("materials")==8, "One press/release recruits and charges once")
 	check(board.selected_structure_id == 100 and board.selected_unit_id == -1 and not board.placement_mode, "Release does not reselect newly recruited unit")
 	var recruit: GameState.Unit = board.game_state.unit_at(board.grid.get_neighbors(0)[3])
 	click(_screen(board.grid.get_neighbors(0)[3]))
 	check(board.selected_unit_id == recruit.id and board.unit_label.text.contains("Ready next turn"), "Recruit readiness label")
-	check(board.recruit_box.get_child_count() == 0, "Switching from HQ to unit clears recruit buttons")
+	var stale_recruit:=false
+	for child: Node in board.recruit_box.get_children():
+		if child is Button: stale_recruit=stale_recruit or (child as Button).name.begins_with("Recruit")
+	check(not stale_recruit and board.recruit_box.get_child_count()>=2, "Switching from HQ to unit replaces recruitment with unit context actions")
 	click(_screen(board.game_state.structures[100].cell_id))
 	keypress(KEY_ESCAPE)
 	check(board.selected_structure_id == -1 and board.selected == board.NONE, "Escape clears HQ selection")

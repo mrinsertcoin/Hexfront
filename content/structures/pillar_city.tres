@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="StructureDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/structure_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "pillar_city"
+display_name = "Pillar City"
+description = "An inhabited city core and node in the bridge supply network."
+max_hp = 30
+tags = PackedStringArray("headquarters", "victory_objective", "pillar", "city", "structure", "recruiter")
+costs = {"materials": 8}
+turn_production = {"food": 1, "materials": 1}
+can_recruit = true
+visual_id = "pillar_city"

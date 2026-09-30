@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="NeutralGroupDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/neutral_group_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fertile_grazers"
+display_name = "Grazing Herd"
+composition = {"wild_grazer": 2}
+relationship_policy = "neutral"
+spawn_tags = PackedStringArray("fertile", "wildlife")
+biome_affinities = {"Grassland": 1.0, "Wetland": 0.6}
+difficulty = 1
+awareness_range = 2
+leash_distance = 3

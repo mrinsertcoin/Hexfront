@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="FactionDefinition" load_steps=3 format=3]
+[ext_resource type="Script" path="res://scripts/content/faction_definition.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/content/baumeister_config.gd" id="2"]
+[sub_resource type="Resource" id="BaumeisterConfig_main"]
+script = ExtResource("2")
+max_bridge_distance = 4
+bridge_material_cost_per_edge = 2
+bridge_construction_turns = 2
+bridge_max_hp = 12
+bridge_maintenance_materials = 1
+pillar_max_integrity = 20
+neglected_integrity_loss = 1
+pillar_repair_amount = 4
+bridge_repair_amount = 4
+unit_repair_amount = 3
+repair_material_cost = 1
+supplied_repair_bonus = 1
+integrity_damage_divisor = 2
+bridge_edge_cost = 1
+ordinary_edge_cost = 2
+designation_range = 3
+designation_duration_turns = 2
+designation_damage_bonus = 1
+research_per_civic_monument = 1
+hero_limit = 1
+[resource]
+script = ExtResource("1")
+id = "baumeister"
+display_name = "Baumeister"
+description = "A biological industrial civilization expanding through pillar cities and supplied bridges."
+resource_ids = PackedStringArray("food", "materials", "energy", "unity")
+unit_roster_ids = PackedStringArray("scout_trike", "bridgewright", "conqueror_squad", "assault_tank", "long_range_tank", "anti_air_tank", "medic_squad", "trike_commander")
+structure_roster_ids = PackedStringArray("pillar_city")
+starting_resources = {"food": 20, "materials": 20, "energy": 6, "unity": 3}
+turn_resource_income = {}
+starting_unit_ids = PackedStringArray("scout_trike", "bridgewright", "conqueror_squad")
+starting_structure_ids = PackedStringArray("pillar_city")
+technology_ids = PackedStringArray("bm_industrial_foundations", "bm_civic_services", "bm_armored_fabrication", "bm_deployed_artillery", "bm_air_defense", "bm_repair_doctrine", "bm_command_network")
+visual_theme_id = "baumeister"
+music_id = "builders"
+gameplay_config = SubResource("BaumeisterConfig_main")

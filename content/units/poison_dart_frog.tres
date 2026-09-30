@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "poison_dart_frog"
+display_name = "Poison Dart Frog"
+max_hp = 8
+movement = 2
+attack_range = 2
+attack_damage = 3
+costs = {"food": 5, "synapse": 3}
+upkeep = {"food": 3}
+turn_production = {"synapse": 2}
+corpse_food_value = 4
+temporary_lifetime_turns = 5
+tags = PackedStringArray("marsh_unit", "temporary", "synaptic", "disease_susceptible")
+visual_id = "poison_dart_frog"

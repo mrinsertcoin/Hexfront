@@ -82,12 +82,12 @@ func _run() -> void:
 	check(board.navigation.target_distance == board.navigation.max_distance(), "Wheel reaches whole-planet zoom")
 	var old_yaw: float = board.navigation.target_yaw
 	var press := InputEventMouseButton.new()
-	press.position = Vector2(600, 400)
+	press.position = Vector2(600, 300)
 	press.button_index = MOUSE_BUTTON_MIDDLE
 	press.pressed = true
 	root.push_input(press, true)
 	var drag := InputEventMouseMotion.new()
-	drag.position = Vector2(700, 440)
+	drag.position = Vector2(700, 340)
 	drag.button_mask = MOUSE_BUTTON_MASK_MIDDLE
 	root.push_input(drag, true)
 	check(not is_equal_approx(board.navigation.target_yaw, old_yaw), "Middle drag orbits through viewport input")

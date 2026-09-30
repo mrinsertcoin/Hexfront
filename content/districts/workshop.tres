@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="DistrictDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/district_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "workshop"
+display_name = "Workshop"
+costs = {"materials": 5, "energy": 1}
+construction_turns = 2
+required_unlock_tag = "vehicle_production"
+tags = PackedStringArray("recruitment", "recruits_vehicle", "repairs_vehicle", "repairs_infrastructure")

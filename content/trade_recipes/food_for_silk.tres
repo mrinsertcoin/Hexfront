@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TradeRecipeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/trade_recipe_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "food_for_silk"
+display_name = "Provision the Caravan"
+description = "Exchange surplus food for Living Migration silk."
+input_costs = {"food": 4}
+output_rewards = {"silk": 2}
+allowed_faction_ids = PackedStringArray("living_migration")
+usage_limit_per_turn = 1

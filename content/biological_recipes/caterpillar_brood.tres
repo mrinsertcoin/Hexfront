@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="BiologicalRecipeDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/biological_recipe_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "caterpillar_brood"
+display_name = "Caterpillar Brood"
+branch_id = "caterpillar_foliage"
+costs = {"food": 4}
+development_turns = 3
+nutrient_requirement = 4
+outcome_unit_ids = PackedStringArray("brimstone_butterfly", "fire_moth", "admiral")

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "mosquito"
+display_name = "Mosquito"
+max_hp = 4
+movement = 4
+attack_range = 1
+attack_damage = 2
+costs = {"food": 2, "synapse": 1}
+upkeep = {"food": 1}
+corpse_food_value = 1
+temporary_lifetime_turns = 4
+tags = PackedStringArray("marsh_unit", "temporary", "morale_immune", "disease_immune")
+vision_range = 4
+detection_range = 1
+visual_id = "mosquito"

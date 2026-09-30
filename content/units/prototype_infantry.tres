@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "prototype_infantry"
+display_name = "Infantry"
+max_hp = 10
+movement = 2
+attack_range = 1
+attack_damage = 3
+costs = {"materials": 4}
+corpse_food_value = 3
+tags = PackedStringArray("military", "prototype", "disease_susceptible")
+visual_id = "infantry"

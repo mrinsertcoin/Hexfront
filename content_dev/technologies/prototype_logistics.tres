@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="TechnologyDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/technology_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "prototype_logistics"
+display_name = "Prototype Logistics"
+description = "Development-only research content used to validate the research foundation."
+research_cost = 5
+unlock_tags = PackedStringArray("prototype_logistics")

@@ -1,266 +1,145 @@
 class_name GameRules
 extends RefCounted
+## Stable facade over coherent authoritative rule domains.
 
-class Result extends RefCounted:
-	var success: bool
-	var reason: String
-	var path: Array[int] = []
-	var damage: int = 0
-	var target_hp: int = 0
-	var killed: bool = false
-	var winner_id: int = 0
-
-	func _init(accepted: bool, message: String, route: Array[int] = []) -> void:
-		success = accepted
-		reason = message
-		path = route
+class Result extends RuleResult:
+	pass
 
 var state: GameState
+var movement_rules: MovementRules
+var combat_rules: CombatRules
+var research_rules: ResearchRules
+var recruitment_rules: RecruitmentRules
+var site_rules: SiteRules
+var living_migration_rules: LivingMigrationRules
+var baumeister_rules: BaumeisterRules
 
 func _init(game_state: GameState) -> void:
-	state = game_state
+	state=game_state
+	movement_rules=MovementRules.new(state)
+	combat_rules=CombatRules.new(state)
+	research_rules=ResearchRules.new(state)
+	living_migration_rules=LivingMigrationRules.new(state,research_rules)
+	movement_rules.capability_rules=living_migration_rules
+	baumeister_rules=BaumeisterRules.new(state,research_rules)
+	movement_rules.network_rules=baumeister_rules
+	recruitment_rules=RecruitmentRules.new(state,research_rules)
+	recruitment_rules.capability_rules=baumeister_rules
+	site_rules=SiteRules.new(state,research_rules)
 
-func _actor_error(actor: int) -> String:
-	if state.winner_id != 0:
-		return "Match over. Player %d wins. Restart to play again." % state.winner_id
-	if actor != 1 and actor != 2:
-		return "Unknown player."
-	if actor != state.active_player:
-		return "It is Player %d's turn." % state.active_player
-	return ""
+func _wrap(source: RuleResult) -> Result:
+	var result:=Result.new(source.success,source.reason,source.path)
+	result.damage=source.damage; result.target_hp=source.target_hp; result.killed=source.killed; result.winner_id=source.winner_id
+	return result
 
-func _move_error(actor: int, unit_id: int) -> String:
-	var actor_error: String = _actor_error(actor)
-	if not actor_error.is_empty():
-		return actor_error
-	if not state.units.has(unit_id):
-		return "That unit does not exist."
-	var unit: GameState.Unit = state.units[unit_id]
-	if unit.hp <= 0:
-		return "That unit is no longer alive."
-	if unit.owner_id != actor:
-		return "You can only move your own units."
-	if unit.attacked:
-		return "Cannot move after attacking this turn."
-	if unit.moved:
-		return "This unit has already moved this turn."
-	return ""
+func _commit(source: RuleResult) -> Result:
+	if source.success: state.refresh_visibility()
+	return _wrap(source)
 
-# The same bounded BFS powers highlights, previews, and command validation.
-# A parent is assigned only on first discovery; sorted neighbor IDs break ties.
-func _parents(unit: GameState.Unit) -> Dictionary[int, int]:
-	var blocked: Dictionary = {}
-	for other: GameState.Unit in state.units.values():
-		blocked[other.cell_id] = true
-	for structure: GameState.Structure in state.structures.values():
-		blocked[structure.cell_id] = true
-	return state.grid.breadth_first(unit.cell_id, unit.movement, blocked).parents
+func reachable(actor: int,unit_id: int) -> Array[int]:
+	return movement_rules.reachable(actor,unit_id)
 
-func reachable(actor: int, unit_id: int) -> Array[int]:
-	var destinations: Array[int] = []
-	if not _move_error(actor, unit_id).is_empty():
-		return destinations
-	var unit: GameState.Unit = state.units[unit_id]
-	var parents: Dictionary[int, int] = _parents(unit)
-	for cell_id: int in parents:
-		if cell_id != unit.cell_id:
-			destinations.append(cell_id)
-	return destinations
+func path_to(actor: int,unit_id: int,destination: int) -> Array[int]:
+	return movement_rules.path_to(actor,unit_id,destination)
 
-func path_to(actor: int, unit_id: int, destination: int) -> Array[int]:
-	if not _move_error(actor, unit_id).is_empty():
-		return []
-	var unit: GameState.Unit = state.units[unit_id]
-	if destination == unit.cell_id or not state.grid.contains(destination):
-		return []
-	return PlanetGrid.reconstruct_path(_parents(unit), unit.cell_id, destination)
+func try_move(actor: int,unit_id: int,destination: int) -> Result:
+	var result:=movement_rules.try_move(actor,unit_id,destination)
+	if result.success: result.reason+=living_migration_rules.after_move(unit_id)
+	return _commit(result)
 
-func try_move(actor: int, unit_id: int, destination: int) -> Result:
-	var error: String = _move_error(actor, unit_id)
-	if not error.is_empty():
-		return Result.new(false, error)
-	var unit: GameState.Unit = state.units[unit_id]
-	if not state.grid.contains(destination):
-		return Result.new(false, "Choose a tile on the board.")
-	if destination == unit.cell_id:
-		return Result.new(false, "The unit is already on that tile.")
-	if state.entity_at(destination) != null:
-		return Result.new(false, "That tile is occupied.")
-	var path: Array[int] = path_to(actor, unit_id, destination)
-	if path.is_empty():
-		return Result.new(false, "No open path within this unit's movement allowance.")
-	# All rejection paths above are read-only. Apply only after validation.
-	unit.cell_id = destination
-	unit.moved = true
-	return Result.new(true, "Moved %d step(s). Movement action spent." % (path.size() - 1), path)
+func preview_attack(actor: int,attacker_id: int,target_id: int) -> Result:
+	return _wrap(combat_rules.preview_attack(actor,attacker_id,target_id))
+
+func attack_targets(actor: int,attacker_id: int) -> Array[int]:
+	return combat_rules.attack_targets(actor,attacker_id)
+
+func try_attack(actor: int,attacker_id: int,target_id: int) -> Result:
+	return _commit(combat_rules.try_attack(actor,attacker_id,target_id))
+
+func recruit_error(actor: int,headquarters_id: int,unit_id: String) -> String:
+	return recruitment_rules.recruit_error(actor,headquarters_id,unit_id)
+
+func recruit_destinations(actor: int,headquarters_id: int,unit_id: String) -> Array[int]:
+	return recruitment_rules.recruit_destinations(actor,headquarters_id,unit_id)
+
+func try_recruit(actor: int,headquarters_id: int,unit_id: String,destination: int) -> Result:
+	return _commit(recruitment_rules.try_recruit(actor,headquarters_id,unit_id,destination))
+
+func available_units(player_id: int) -> PackedStringArray:
+	var result:=PackedStringArray()
+	var player:=state.player_for_controller(player_id)
+	if player==null: return result
+	for unit_id: String in state.registry.faction(player.faction_id).unit_roster_ids:
+		if research_rules.is_unit_unlocked(player_id,unit_id): result.append(unit_id)
+	return result
+
+func available_technologies(player_id: int) -> PackedStringArray:
+	return research_rules.available_technologies(player_id)
+
+func interactable_sites(controller_id: int) -> Array[WorldSiteState]:
+	return site_rules.interactable_sites(controller_id)
+
+func available_site_interactions(controller_id: int,site_id: int) -> Array[Dictionary]:
+	return site_rules.available_interactions(controller_id,site_id)
+
+func site_interaction_error(controller_id: int,site_id: int,interaction_id: String,unit_id: int=-1) -> String:
+	return site_rules.interaction_error(controller_id,site_id,interaction_id,unit_id)
+
+func try_site_interaction(controller_id: int,site_id: int,interaction_id: String,unit_id: int=-1) -> Result:
+	return _commit(site_rules.try_interact(controller_id,site_id,interaction_id,unit_id))
 
 func try_end_turn(actor: int) -> Result:
-	var error: String = _actor_error(actor)
-	if not error.is_empty():
-		return Result.new(false, error)
-	if state.active_player == 1:
-		state.active_player = 2
-	else:
-		state.active_player = 1
-		state.round_number += 1
-	# Run authoritative per-turn start effects for the incoming player
-	_start_turn()
-	return Result.new(true, "Player %d's turn." % state.active_player)
+	var error:=RuleAuthority.actor_error(state,actor)
+	if not error.is_empty(): return Result.new(false,error)
+	living_migration_rules.end_turn(actor)
+	baumeister_rules.end_turn(actor)
+	state.advance_turn()
+	living_migration_rules.start_turn(state.active_player)
+	baumeister_rules.start_turn(state.active_player)
+	return Result.new(true,"Player %d's turn." % state.active_player)
+
+func finish_neutral_phase() -> Result:
+	if not state.turn_state.neutral_phase: return Result.new(false,"Neutral activity is not in progress.")
+	state.advance_turn()
+	living_migration_rules.start_turn(state.active_player)
+	baumeister_rules.start_turn(state.active_player)
+	return Result.new(true,"Player %d's turn." % state.active_player)
+
+func restart_match() -> void:
+	state.reset_match()
+	living_migration_rules.start_turn(state.active_player)
+	baumeister_rules.start_turn(state.active_player)
 
 func _start_turn() -> void:
 	state.start_turn()
 
-func _attack_error(actor: int, attacker_id: int, target_id: int) -> String:
-	var error: String = _actor_error(actor)
-	if not error.is_empty():
-		return error
-	# Attacker must be a living military unit
-	if not state.units.has(attacker_id) or state.units[attacker_id].hp <= 0:
-		return "The attacker does not exist or is no longer alive."
-	# Target may be a unit or a structure
-	var target_is_unit: bool = state.units.has(target_id)
-	var target_is_struct: bool = state.structures.has(target_id)
-	if not target_is_unit and not target_is_struct:
-		return "The target does not exist or is no longer alive."
-	# Reject dead unit targets (hp <= 0)
-	if target_is_unit and state.units[target_id].hp <= 0:
-		return "The target does not exist or is no longer alive."
-	# Reject destroyed structures (hp <= 0)
-	if target_is_struct and state.structures[target_id].hp <= 0:
-		return "The target does not exist or is no longer alive."
-	var attacker: GameState.Unit = state.units[attacker_id]
-	var target_unit: GameState.Unit = state.units[target_id] if target_is_unit else null
-	var target_struct: GameState.Structure = state.structures[target_id] if target_is_struct else null
-	if attacker.owner_id != actor:
-		return "You can only attack with your own units."
-	if attacker_id == target_id:
-		return "A unit cannot attack itself."
-	# Disallow attacking own targets (unit or structure)
-	if (target_unit != null and target_unit.owner_id == actor) or (target_struct != null and target_struct.owner_id == actor):
-		return "Choose an enemy target."
-	if attacker.attacked:
-		return "This unit has already attacked this turn."
-	var distance: int = state.grid.distance(attacker.cell_id, target_unit.cell_id) if target_unit != null else state.grid.distance(attacker.cell_id, target_struct.cell_id)
-	if distance > attacker.attack_range:
-		return "Target is out of range (range %d)." % attacker.attack_range
-	return ""
+func start_research(player_id: int,technology_id: String) -> Result:
+	return _wrap(research_rules.start_research(player_id,technology_id))
 
-# Returns a fresh result; queries never mutate units, actions, or match state.
-# Damage is the fixed attack value, even when clamping HP prevents overkill.
-func preview_attack(actor: int, attacker_id: int, target_id: int) -> Result:
-	var error: String = _attack_error(actor, attacker_id, target_id)
-	if not error.is_empty():
-		return Result.new(false, error)
-	var attacker: GameState.Unit = state.units[attacker_id]
-	var result: Result
-	if state.units.has(target_id):
-		var target_u: GameState.Unit = state.units[target_id]
-		result = Result.new(true, "%s dealt %d damage to %s." % [attacker.unit_type, attacker.attack_damage, target_u.unit_type])
-		result.damage = attacker.attack_damage
-		result.target_hp = maxi(0, target_u.hp - result.damage)
-		result.killed = result.target_hp == 0
-		if result.killed:
-			result.reason += " %s eliminated." % target_u.unit_type
-	else:
-		var target_s: GameState.Structure = state.structures[target_id]
-		result = Result.new(true, "%s dealt %d damage to %s." % [attacker.unit_type, attacker.attack_damage, target_s.structure_type])
-		result.damage = attacker.attack_damage
-		result.target_hp = maxi(0, target_s.hp - result.damage)
-		result.killed = result.target_hp == 0
-		if result.killed:
-			result.reason += " %s destroyed." % target_s.structure_type
-			# Headquarters destruction immediately ends the match
-			if target_s.structure_type == "Headquarters":
-				result.winner_id = actor
-				result.reason += " Player %d wins!" % actor
-	return result
+func add_research_progress(player_id: int,amount: int) -> Result:
+	return _wrap(research_rules.add_research_progress(player_id,amount))
 
-func attack_targets(actor: int, attacker_id: int) -> Array[int]:
-	var targets: Array[int] = []
-	# Consider both unit and structure targets
-	for target_id: int in state.units:
-		if preview_attack(actor, attacker_id, target_id).success:
-			targets.append(target_id)
-	for target_id: int in state.structures:
-		if preview_attack(actor, attacker_id, target_id).success:
-			targets.append(target_id)
-	return targets
-
-func try_attack(actor: int, attacker_id: int, target_id: int) -> Result:
-	var result: Result = preview_attack(actor, attacker_id, target_id)
-	if not result.success:
-		return result
-	var attacker: GameState.Unit = state.units[attacker_id]
-	attacker.attacked = true
-	attacker.moved = true
-	# Apply damage to unit or structure
-	if state.units.has(target_id):
-		var t_u: GameState.Unit = state.units[target_id]
-		t_u.hp = result.target_hp
-		if result.killed:
-			state.units.erase(target_id)
-	else:
-		var t_s: GameState.Structure = state.structures[target_id]
-		t_s.hp = result.target_hp
-		if result.killed:
-			state.structures.erase(target_id)
-	# Update winner if any
-	state.winner_id = result.winner_id
-	return result
-
-func recruit_error(actor: int, headquarters_id: int, unit_type: String) -> String:
-	var error: String = _actor_error(actor)
-	if not error.is_empty():
-		return error
-	if not state.structures.has(headquarters_id):
-		return "That headquarters does not exist."
-	var headquarters: GameState.Structure = state.structures[headquarters_id]
-	if headquarters.structure_type != "Headquarters" or headquarters.hp <= 0:
-		return "Choose a living headquarters."
-	if headquarters.owner_id != actor:
-		return "You do not control that headquarters."
-	if not headquarters.recruit_available:
-		return "This headquarters has already recruited this turn."
-	var kind: String = unit_type.capitalize()
-	if not UnitTypes.STATS.has(kind) or not UnitTypes.COSTS.has(kind):
-		return "Unknown unit type."
-	if state.materials[actor] < int(UnitTypes.COSTS[kind]):
-		return "Insufficient materials."
-	return ""
-
-func recruit_destinations(actor: int, headquarters_id: int, kind: String) -> Array[int]:
-	var destinations: Array[int] = []
-	if not recruit_error(actor, headquarters_id, kind).is_empty():
-		return destinations
-	var headquarters: GameState.Structure = state.structures[headquarters_id]
-	for cell_id: int in state.grid.get_neighbors(headquarters.cell_id):
-		if state.grid.contains(cell_id) and state.entity_at(cell_id) == null:
-			destinations.append(cell_id)
-	return destinations
-
-func try_recruit(actor: int, headquarters_id: int, unit_type: String, destination: int) -> Result:
-	var error: String = recruit_error(actor, headquarters_id, unit_type)
-	if not error.is_empty():
-		return Result.new(false, error)
-	var headquarters: GameState.Structure = state.structures[headquarters_id]
-	if not state.grid.contains(destination):
-		return Result.new(false, "Choose a tile on the board.")
-	if state.grid.distance(headquarters.cell_id, destination) != 1:
-		return Result.new(false, "Destination must be adjacent to the headquarters.")
-	if state.entity_at(destination) != null:
-		return Result.new(false, "Destination is occupied.")
-	var kind: String = unit_type.capitalize()
-	var unit := GameState.Unit.new(state.allocate_id(), actor, kind, destination)
-	unit.moved = true
-	unit.attacked = true
-	unit.ready_next_turn = true
-	state.units[unit.id] = unit
-	state.materials[actor] -= int(UnitTypes.COSTS[kind])
-	headquarters.recruit_available = false
-	return Result.new(true, "%s recruited. Ready next turn." % kind)
-
-func restart_match() -> void:
-	state.reset_match()
-	# Ensure the active player's turn-start effects are applied once
-	_start_turn()
-
+func choose_nursery(actor: int,spider_id: int,branch_id: String) -> Result: return _commit(living_migration_rules.choose_nursery(actor,spider_id,branch_id))
+func start_internal_construction(actor: int,spider_id: int,building_id: String) -> Result: return _commit(living_migration_rules.start_internal_construction(actor,spider_id,building_id))
+func queue_biological_production(actor: int,spider_id: int,recipe_id: String) -> Result: return _commit(living_migration_rules.queue_biological_production(actor,spider_id,recipe_id))
+func deploy_biological(actor: int,spider_id: int,job_index: int,outcome_id: String,cell_id: int) -> Result: return _commit(living_migration_rules.deploy_biological(actor,spider_id,job_index,outcome_id,cell_id))
+func transform_caterpillar(actor: int,unit_id: int,outcome_id: String) -> Result: return _commit(living_migration_rules.transform_caterpillar(actor,unit_id,outcome_id))
+func start_spider_construction(actor: int,spider_id: int) -> Result: return _commit(living_migration_rules.start_spider_construction(actor,spider_id))
+func deploy_spider(actor: int,spider_id: int,cell_id: int) -> Result: return _commit(living_migration_rules.deploy_spider(actor,spider_id,cell_id))
+func deploy_mite(actor: int,spider_id: int,cell_id: int) -> Result: return _commit(living_migration_rules.deploy_mite(actor,spider_id,cell_id))
+func try_build_road(actor: int,worker_id: int,path: Array) -> Result:
+	var typed_path: Array[int]=[]
+	for cell_id: Variant in path: typed_path.append(int(cell_id))
+	return _commit(living_migration_rules.try_build_road(actor,worker_id,typed_path))
+func try_consume_corpse(actor: int,ant_id: int,corpse_id: int) -> Result: return _commit(living_migration_rules.try_consume_corpse(actor,ant_id,corpse_id))
+func select_disease(actor: int,mite_id: int,disease_id: String) -> Result: return _commit(living_migration_rules.select_disease(actor,mite_id,disease_id))
+func build_district(actor: int,pillar_id: int,cell_id: int,district_id: String) -> Result: return _commit(baumeister_rules.build_district(actor,pillar_id,cell_id,district_id))
+func start_bridge_extension(actor: int,engineer_id: int,pillar_id: int,cell_id: int) -> Result: return _commit(baumeister_rules.start_bridge_extension(actor,engineer_id,pillar_id,cell_id))
+func toggle_deployment(actor: int,unit_id: int) -> Result: return _commit(baumeister_rules.toggle_deployment(actor,unit_id))
+func heal_unit(actor: int,healer_id: int,target_id: int) -> Result: return _commit(baumeister_rules.heal_unit(actor,healer_id,target_id))
+func repair_unit(actor: int,engineer_id: int,target_id: int) -> Result: return _commit(baumeister_rules.repair_unit(actor,engineer_id,target_id))
+func repair_structure(actor: int,engineer_id: int,pillar_id: int) -> Result: return _commit(baumeister_rules.repair_structure(actor,engineer_id,pillar_id))
+func damage_bridge(actor: int,attacker_id: int,bridge_id: int) -> Result: return _commit(baumeister_rules.damage_bridge(actor,attacker_id,bridge_id))
+func repair_bridge(actor: int,engineer_id: int,bridge_id: int) -> Result: return _commit(baumeister_rules.repair_bridge(actor,engineer_id,bridge_id))
+func designate_target(actor: int,commander_id: int,target_id: int) -> Result: return _commit(baumeister_rules.designate_target(actor,commander_id,target_id))
+func district_support(actor: int,district_id: int,target_id: int) -> Result: return _commit(baumeister_rules.district_support(actor,district_id,target_id))

@@ -17,6 +17,7 @@ func fixture(start: int = 0, allowance: int = 3) -> GameState:
 	state.units.clear()
 	state.structures.clear()
 	state.units[1] = GameState.Unit.new(1, 1, "Scout", start, allowance)
+	state.refresh_visibility()
 	return state
 
 func reject(state: GameState, actor: int, unit_id: int, destination: int) -> void:
@@ -52,7 +53,7 @@ func _run() -> void:
 	for unit: GameState.Unit in initial.units.values():
 		check(grid.contains(unit.cell_id) and not occupied.has(unit.cell_id), "Distinct valid starting units")
 		occupied[unit.cell_id] = true
-		check(unit.movement == UnitTypes.STATS[unit.unit_type].movement and not unit.moved, "Unchanged movement balance")
+		check(unit.movement == initial.registry.unit(unit.definition_id).movement and not unit.moved, "Unchanged movement balance")
 	for hq: GameState.Structure in initial.structures.values():
 		check(not occupied.has(hq.cell_id) and hq.hp == 25, "Distinct HQ and preserved HP")
 		occupied[hq.cell_id] = true
@@ -65,7 +66,7 @@ func _run() -> void:
 				for neighbor: int in grid.get_neighbors(start):
 					if block_mode == 2 or (block_mode == 1 and blocked.is_empty()):
 						var id: int = state.allocate_id()
-						state.units[id] = GameState.Unit.new(id, 1 + id % 2, "Infantry", neighbor)
+						state.units[id] = GameState.Unit.new(id, 1, "Infantry", neighbor)
 						blocked[neighbor] = true
 				var rules := GameRules.new(state)
 				var before: String = TestState.snapshot(state)

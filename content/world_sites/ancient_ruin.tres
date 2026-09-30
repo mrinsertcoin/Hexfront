@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WorldSiteDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/world_site_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "ancient_ruin"
+display_name = "Ancient Ruin"
+description = "A guarded landmark containing knowledge and faction-useful salvage."
+tags = PackedStringArray("ruin", "landmark", "guarded")
+blocks_movement = true
+selectable = true
+interactable = true
+category = "ruin"
+interaction_type = "explore"
+reward_resources = {"food": 2, "silk": 2, "materials": 2, "energy": 1}
+research_progress_reward = 2
+guardian_group_id = "ruin_guardians"
+visual_id = "ancient_ruin"

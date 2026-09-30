@@ -14,10 +14,12 @@ var uvs: PackedVector2Array = []
 var uv2s: PackedVector2Array = []
 var chunks: Array[MeshInstance3D] = []
 var water: PlanetWaterRenderer
+var dressing: WorldDressing
 var build_ms: float = 0.0
 var triangle_count: int = 0
 
-func rebuild(planet: GeneratedPlanet, settings: TerrainRenderConfig) -> void:
+func rebuild(planet: GeneratedPlanet, settings: TerrainRenderConfig,
+		exclusions: Array[Vector3] = []) -> void:
 	assert(settings.validate().is_empty(), "Invalid terrain render settings")
 	var start: int = Time.get_ticks_usec()
 	for child: Node in get_children(): child.free()
@@ -45,7 +47,7 @@ func rebuild(planet: GeneratedPlanet, settings: TerrainRenderConfig) -> void:
 		var data: PlanetWorldCellData = world.sample_fields(direction)
 		var weights: Array[float] = [0,0,0,0,0]
 		for i in range(world.config.biomes.size()):
-			var slot: int = TerrainMaterialLibrary.IDS.find(world.config.biomes[i].biome_id)
+			var slot: int = StylizedTerrainMaterial.IDS.find(world.config.biomes[i].biome_id)
 			if slot >= 0: weights[slot] += data.biome_weights[i]
 		colors.append(Color(weights[0],weights[1],weights[2],weights[3]))
 		uvs.append(Vector2(data.effective_moisture,data.terrain_roughness))
@@ -60,7 +62,7 @@ func rebuild(planet: GeneratedPlanet, settings: TerrainRenderConfig) -> void:
 		picking_faces.append_array(PackedVector3Array([vertices[f.x],vertices[f.z],vertices[f.y]]))
 	surface.picking_mesh = TriangleMesh.new()
 	surface.picking_mesh.create_from_faces(picking_faces)
-	var material: ShaderMaterial = TerrainMaterialLibrary.build(config)
+	var material: ShaderMaterial = StylizedTerrainMaterial.build(config)
 	var per_chunk: int = faces.size() / 20
 	for chunk in range(20):
 		var instance := MeshInstance3D.new()
@@ -72,6 +74,11 @@ func rebuild(planet: GeneratedPlanet, settings: TerrainRenderConfig) -> void:
 	water = PlanetWaterRenderer.new()
 	add_child(water)
 	water.rebuild(world,surface)
+	dressing = WorldDressing.new()
+	dressing.name = "WorldDressing"
+	dressing.exclusion_directions = exclusions.duplicate()
+	add_child(dressing)
+	dressing.rebuild(world,surface,config.dressing)
 	triangle_count = faces.size()
 	build_ms = (Time.get_ticks_usec()-start)/1000.0
 	print("Terrain render: cells=%d visual_level=%d triangles=%d chunks=20 build_ms=%.1f" % [world.grid_reference.cells.size(),config.terrain_subdivision_level,triangle_count,build_ms])

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "wild_predator"
+display_name = "Wild Predator"
+description = "Territorial wildlife that attacks intruders."
+max_hp = 9
+movement = 2
+attack_range = 1
+attack_damage = 3
+corpse_food_value = 3
+tags = PackedStringArray("neutral", "wildlife", "biological", "predator")
+visual_id = "wild_predator"

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "living_caterpillar"
+display_name = "Caterpillar"
+max_hp = 7
+movement = 2
+attack_range = 1
+attack_damage = 1
+costs = {"food": 4}
+upkeep = {"food": 3}
+corpse_food_value = 3
+tags = PackedStringArray("caterpillar", "terrain_harvester", "morale_immune", "disease_immune")
+visual_id = "living_caterpillar"

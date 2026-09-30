@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BiologicalRecipeDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/biological_recipe_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "marsh_larva"
+display_name = "Marsh Larva"
+branch_id = "marsh"
+costs = {"food": 3, "synapse": 2}
+development_turns = 2
+outcome_unit_ids = PackedStringArray("dragonfly", "mosquito", "poison_dart_frog", "bullfrog", "unke")

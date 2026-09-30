@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="DiseaseDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/disease_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "weakening"
+display_name = "Weakening"
+duration_turns = 2
+immunity_turns = 2
+attack_damage_reduction = 2
+unlock_tag = "disease_weakening"

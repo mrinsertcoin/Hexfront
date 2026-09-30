@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="WorldSiteDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/world_site_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "energy_source"
+display_name = "Thermal Vent"
+description = "A volatile but renewable source of energy."
+tags = PackedStringArray("resource_deposit", "renewable", "thermal")
+selectable = true
+interactable = true
+category = "resource"
+interaction_type = "gather"
+reward_resources = {"energy": 2}
+initial_charges = 1
+regeneration_turns = 3
+visual_id = "energy_source"

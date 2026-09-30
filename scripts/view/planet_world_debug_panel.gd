@@ -11,6 +11,7 @@ var regenerate_button: Button
 var new_seed_button: Button
 var _inspected: int = -2
 var _world: GeneratedPlanet
+var _population_line: String=""
 
 func _init() -> void:
 	position = Vector2(18, 188)
@@ -81,8 +82,13 @@ func show_world(world: GeneratedPlanet) -> void:
 		world.regions.size(), world.config.world_seed, world.generation_ms, world.generation_fingerprint.left(18)]
 	if world.hydrology != null:
 		summary_label.text += "\n%d basins | %d lakes | %d river segments" % [world.hydrology.basins.size(), world.hydrology.lakes.size(), world.hydrology.river_segments.size()]
+	if not _population_line.is_empty(): summary_label.text+="\n"+_population_line
 	_inspected = -2
 	inspect_cell(-1)
+
+func show_population(result: WorldPopulationResult,preset: String) -> void:
+	_population_line="Population %s v%d | %d sites | %d groups | %.1f ms\n%s..." % [preset,result.generation_version,result.site_records.size(),result.neutral_group_records.size(),result.generation_ms,result.fingerprint.left(18)]
+	if _world!=null: show_world(_world)
 
 func inspect_cell(id: int) -> void:
 	if id == _inspected or _world == null:

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "stone_guardian"
+display_name = "Stone Guardian"
+description = "An ancient construct bound to a nearby ruin."
+max_hp = 14
+movement = 1
+attack_range = 1
+attack_damage = 4
+tags = PackedStringArray("neutral", "guardian", "construct")
+visual_id = "stone_guardian"

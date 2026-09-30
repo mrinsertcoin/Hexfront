@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="TradeRecipeDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/trade_recipe_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "materials_for_energy"
+display_name = "Fuel Exchange"
+description = "Trade refined material for a compact energy cell."
+input_costs = {"materials": 4}
+output_rewards = {"energy": 1}
+allowed_faction_ids = PackedStringArray("baumeister")
+usage_limit_per_turn = 1

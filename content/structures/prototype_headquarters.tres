@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="StructureDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/structure_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "prototype_headquarters"
+display_name = "Headquarters"
+max_hp = 25
+tags = PackedStringArray("headquarters", "recruiter", "victory_objective")
+can_recruit = true
+visual_id = "headquarters"

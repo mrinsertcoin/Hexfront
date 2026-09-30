@@ -1,4 +1,0 @@
-﻿Original material: Gravel022
-Original archive:  Gravel022_2K-PNG.zip
-Hexfront key:      terrain_rock_pebble_gravel
-Godot normal map:  normal_gl.png

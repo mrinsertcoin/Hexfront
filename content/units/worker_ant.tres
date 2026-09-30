@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "worker_ant"
+display_name = "Worker Ant"
+max_hp = 6
+movement = 2
+attack_range = 1
+attack_damage = 1
+costs = {"food": 2, "synapse": 1}
+upkeep = {"food": 1}
+corpse_food_value = 2
+tags = PackedStringArray("ant", "road_bound", "road_builder", "morale_immune", "disease_immune")
+visual_id = "worker_ant"
