@@ -11,6 +11,7 @@ func _run() -> void:
 	board.set_process(false)
 	await process_frame
 	await process_frame
+	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.combat_planning_enabled=false; board._refresh_display()
 	start_cell = board.game_state.units[2].cell_id
 	destination_cell = board.rules.reachable(1, 2)[-1]
 	check(board.animate_movement, "Movement presentation enabled by default")

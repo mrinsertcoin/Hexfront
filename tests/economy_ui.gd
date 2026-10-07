@@ -11,6 +11,7 @@ func _run() -> void:
 	board.set_process(false)
 	await process_frame
 	await process_frame
+	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.combat_planning_enabled=false; board._refresh_display()
 	var initial: String = Snapshot.snapshot(board.game_state)
 	for repeat in range(3):
 		board._refresh_display()
@@ -22,19 +23,21 @@ func _run() -> void:
 	var button: Button = board.recruit_box.get_node("RecruitScout") as Button
 	click(button.get_global_rect().get_center())
 	check(board.placement_mode and board.recruit_hq_id == 100 and board.recruit_choice == "prototype_scout", "Recruit button enters placement")
-	click(_screen(board.grid.get_neighbors(0)[3]), MOUSE_BUTTON_RIGHT)
+	var placement_cell: int=board.recruit_highlights[0]
+	click(_screen(placement_cell), MOUSE_BUTTON_RIGHT)
 	check(not board.placement_mode and Snapshot.snapshot(board.game_state) == initial, "Right-click press/release cancels without attack or charge")
-	check(not board.tiles[board.grid.get_neighbors(0)[3]].visible, "Cancel removes placement highlight")
+	check(not board.tiles[placement_cell].visible, "Cancel removes placement highlight")
 	board._begin_recruit("Scout", 100)
 	keypress(KEY_ESCAPE)
 	check(not board.placement_mode and board.recruit_highlights.is_empty(), "Escape cancels placement")
 	board._begin_recruit("Scout", 100)
 	var count_before: int = board.game_state.units.size()
-	click(_screen(board.grid.get_neighbors(0)[3]))
+	placement_cell=board.recruit_highlights[0]
+	click(_screen(placement_cell))
 	check(board.game_state.units.size() == count_before + 1 and board.game_state.players[1].resource_amount("materials")==8, "One press/release recruits and charges once")
 	check(board.selected_structure_id == 100 and board.selected_unit_id == -1 and not board.placement_mode, "Release does not reselect newly recruited unit")
-	var recruit: GameState.Unit = board.game_state.unit_at(board.grid.get_neighbors(0)[3])
-	click(_screen(board.grid.get_neighbors(0)[3]))
+	var recruit: GameState.Unit = board.game_state.unit_at(placement_cell)
+	click(_screen(placement_cell))
 	check(board.selected_unit_id == recruit.id and board.unit_label.text.contains("Ready next turn"), "Recruit readiness label")
 	var stale_recruit:=false
 	for child: Node in board.recruit_box.get_children():

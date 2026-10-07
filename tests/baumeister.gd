@@ -11,7 +11,7 @@ func check(ok: bool,message: String) -> void:
 		if failures<50: push_error(message)
 
 func make_state(first: String="baumeister",second: String="living_migration") -> GameState:
-	return GameState.new(PlanetGrid.new(2),{"faction_ids":[first,second],"controller_kinds":[ControllerState.HUMAN,ControllerState.PLAYER_AI]})
+	return GameState.new(PlanetGrid.new(2),{"faction_ids":[first,second],"controller_kinds":[ControllerState.HUMAN,ControllerState.PLAYER_AI],"simultaneous_combat":false})
 
 func pillar_for(state: GameState,controller: int) -> GameState.Structure:
 	for structure: GameState.Structure in state.structures.values():
@@ -53,8 +53,8 @@ func test_content_economy_and_districts() -> void:
 		var extra:=state.baumeister.add_district(1,pillar.id,record[1],record[0],1); extra.construction_progress=1
 	var before_income:=state.players[1].resources.duplicate(true); cycle_to_one(rules)
 	check(state.players[1].resource_amount("materials")==before_income.materials+4,"Completed Mine and pillar produce Materials exactly once")
-	check(state.players[1].resource_amount("food")==before_income.food+1,"Greenhouse, pillar and biological upkeep resolve Food exactly once")
-	check(state.players[1].resource_amount("energy")==before_income.energy+3 and state.players[1].resource_amount("unity")==before_income.unity+2,"Power and civic districts produce Energy and Unity exactly once")
+	check(state.players[1].resource_amount("food")==before_income.food,"Greenhouse, pillar, biological and civic upkeep resolve Food exactly once")
+	check(state.players[1].resource_amount("energy")==before_income.energy+1 and state.players[1].resource_amount("unity")==before_income.unity+2,"Power output and production-district Energy upkeep resolve exactly once")
 
 func test_network_integrity_and_movement() -> void:
 	var state:=make_state(); var rules:=GameRules.new(state); var pillar:=pillar_for(state,1); var engineer: GameState.Unit=state.units[2]

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="TechnologyDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/technology_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "lm_apex_metamorphosis"
+display_name = "Apex Metamorphosis"
+description = "Unlocks the Admiral and reduces caterpillar maturation requirements."
+research_cost = 7
+prerequisite_ids = PackedStringArray("lm_metamorphosis")
+unlock_unit_ids = PackedStringArray("admiral")
+unlock_tags = PackedStringArray("biological_maturation")

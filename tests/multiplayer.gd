@@ -31,7 +31,7 @@ func test_protocol_and_config() -> void:
 	check(config.validate().is_empty() and config.faction_ids().size()==4,"Four-player-ready config permits duplicate faction selections")
 	config.private_population_seed=123456
 	check(not config.public_network_dictionary().has("private_population_seed"),"Private population seed is never included in public match config")
-	check(CommandDispatcher.COMMAND_TYPES.size()==27,"Command inventory covers every current mutating player action")
+	check(CommandDispatcher.COMMAND_TYPES.size()==31 and CommandDispatcher.LAY_LARVA in CommandDispatcher.COMMAND_TYPES and CommandDispatcher.CONSUME in CommandDispatcher.COMMAND_TYPES and CommandDispatcher.COMBAT_INTENT in CommandDispatcher.COMMAND_TYPES and CommandDispatcher.LOCK_COMBAT in CommandDispatcher.COMMAND_TYPES,"Command inventory covers every current mutating player action")
 
 func test_dispatch_authority_and_idempotency() -> void:
 	var state:=GameState.new(PlanetGrid.new(2))

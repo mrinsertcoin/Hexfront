@@ -18,6 +18,8 @@ var modifiers: Dictionary[String,ModifierDefinition]={}
 var biological_recipes: Dictionary[String,BiologicalRecipeDefinition]={}
 var diseases: Dictionary[String,DiseaseDefinition]={}
 var districts: Dictionary[String,DistrictDefinition]={}
+var combat_options: Dictionary[String,CombatOptionDefinition]={}
+var transformation_recipes: Dictionary[String,TransformationRecipe]={}
 var fingerprint: String=""
 var loaded_paths: PackedStringArray=[]
 var _duplicate_errors:=PackedStringArray()
@@ -77,6 +79,8 @@ func add_definition(definition: Resource,path: String="memory") -> void:
 	elif definition is BiologicalRecipeDefinition: table=biological_recipes
 	elif definition is DiseaseDefinition: table=diseases
 	elif definition is DistrictDefinition: table=districts
+	elif definition is CombatOptionDefinition: table=combat_options
+	elif definition is TransformationRecipe: table=transformation_recipes
 	else:
 		_duplicate_errors.append("Unsupported content resource: "+path); return
 	var content_id: String=definition.id
@@ -98,6 +102,8 @@ func modifier(id: String) -> ModifierDefinition: return modifiers.get(id)
 func biological_recipe(id: String) -> BiologicalRecipeDefinition: return biological_recipes.get(id)
 func disease(id: String) -> DiseaseDefinition: return diseases.get(id)
 func district(id: String) -> DistrictDefinition: return districts.get(id)
+func combat_option(id: String) -> CombatOptionDefinition: return combat_options.get(id)
+func transformation_recipe(id: String) -> TransformationRecipe: return transformation_recipes.get(id)
 
 func playable_factions() -> Array[FactionDefinition]:
 	var result: Array[FactionDefinition]=[]
@@ -107,7 +113,7 @@ func playable_factions() -> Array[FactionDefinition]:
 
 func validate() -> PackedStringArray:
 	var errors:=_duplicate_errors.duplicate()
-	for table: Dictionary in [resources,units,structures,factions,technologies,world_sites,neutral_groups,trade_recipes,modifiers,biological_recipes,diseases,districts]:
+	for table: Dictionary in [resources,units,structures,factions,technologies,world_sites,neutral_groups,trade_recipes,modifiers,biological_recipes,diseases,districts,combat_options,transformation_recipes]:
 		for id: String in _sorted_keys(table): errors.append_array(table[id].validate())
 	for id: String in _sorted_keys(units):
 		var definition: UnitDefinition=units[id]
@@ -151,6 +157,10 @@ func validate() -> PackedStringArray:
 		_validate_refs(id,"outcome unit",recipe.outcome_unit_ids,units,errors)
 		for resource_id: String in recipe.costs:
 			if not resources.has(resource_id): errors.append("Recipe %s references missing resource %s" % [id,resource_id])
+	for id: String in _sorted_keys(transformation_recipes):
+		var transform: TransformationRecipe=transformation_recipes[id]
+		if not units.has(transform.result_unit_id): errors.append("Transformation %s references missing unit %s" % [id,transform.result_unit_id])
+		if not transform.research_requirement.is_empty() and not technologies.has(transform.research_requirement): errors.append("Transformation %s references missing technology %s" % [id,transform.research_requirement])
 	var order:=technology_order()
 	if technologies.size()>0 and order.size()!=technologies.size(): errors.append("Technology prerequisites contain a cycle")
 	return errors
@@ -226,9 +236,9 @@ func _refresh_fingerprint() -> void:
 	for id: String in _sorted_keys(resources): rows.append("resource:%s" % id)
 	for id: String in _sorted_keys(units):
 		var d: UnitDefinition=units[id]
-		rows.append("unit:%s:%d:%d:%d:%d:%s:%s:%s:%d:%d:%d:%d:%d:%d:%s:%s" % [id,d.max_hp,d.movement,d.attack_range,d.attack_damage,
+		rows.append("unit:%s:%d:%d:%d:%d:%s:%s:%s:%d:%d:%d:%d:%d:%d:%s:%s:%d" % [id,d.max_hp,d.movement,d.attack_range,d.attack_damage,
 			_dict_record(d.costs),_dict_record(d.upkeep),_dict_record(d.turn_production),d.corpse_food_value,d.temporary_lifetime_turns,
-			d.deployed_attack_range,d.deployed_attack_damage,d.vision_range,d.detection_range,str(d.concealed),",".join(d.tags)])
+			d.deployed_attack_range,d.deployed_attack_damage,d.vision_range,d.detection_range,str(d.concealed),",".join(d.tags),d.squad_size])
 	for id: String in _sorted_keys(structures):
 		var d: StructureDefinition=structures[id]
 		rows.append("structure:%s:%d:%s:%s:%s:%s:%d:%d:%s" % [id,d.max_hp,str(d.can_recruit),_dict_record(d.costs),
@@ -267,6 +277,12 @@ func _refresh_fingerprint() -> void:
 		var d: DistrictDefinition=districts[id]
 		rows.append("district:%s:%s:%s:%s:%d:%s:%s" % [id,_dict_record(d.costs),_dict_record(d.upkeep),
 			_dict_record(d.turn_production),d.construction_turns,d.required_unlock_tag,",".join(d.tags)])
+	for id: String in _sorted_keys(combat_options):
+		var d: CombatOptionDefinition=combat_options[id]
+		rows.append("combat:%s:%s:%d:%d:%d:%d" % [id,str(d.requires_target),d.damage_reduction,d.retaliation_damage,d.cooldown_rounds,d.trigger_limit])
+	for id: String in _sorted_keys(transformation_recipes):
+		var d: TransformationRecipe=transformation_recipes[id]
+		rows.append("transformation:%s:%d:%d:%d:%s:%s:%d" % [id,d.required_food,d.required_matter,d.priority,d.result_unit_id,d.research_requirement,d.hero_limit])
 	fingerprint="|".join(rows).sha256_text()
 
 static func _sorted_keys(table: Dictionary) -> Array[String]:

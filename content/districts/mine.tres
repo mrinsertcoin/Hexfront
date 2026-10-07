@@ -5,6 +5,7 @@ script = ExtResource("1")
 id = "mine"
 display_name = "Mine"
 costs = {"materials": 3}
+upkeep = {"energy": 1}
 turn_production = {"materials": 3}
 construction_turns = 2
 tags = PackedStringArray("production", "materials_production")

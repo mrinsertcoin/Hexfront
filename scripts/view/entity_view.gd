@@ -13,12 +13,35 @@ var _waypoints: PackedVector3Array = []
 var _next_waypoint: int = 0
 var _progress: float = 0.0
 var _start_basis: Basis
+var squad_members: Array[Node3D]=[]
+var max_squad_size: int=1
 
 func configure(wrapper: Node3D) -> void:
 	visual = wrapper as UnitVisual
 	if visual != null:
 		visual.initialize_animation()
 	set_process(false)
+
+func configure_squad(wrapper: Node3D,size: int) -> void:
+	max_squad_size=maxi(1,size); squad_members=[wrapper]
+	for index in range(1,max_squad_size):
+		var member:=wrapper.duplicate(Node.DUPLICATE_USE_INSTANTIATION) as Node3D
+		member.name="SquadMember_%d" % (index+1); add_child(member); squad_members.append(member)
+	for index in range(squad_members.size()): squad_members[index].position=_formation_offset(index,max_squad_size)
+
+func sync_squad_health(current_hp: int,max_hp: int) -> void:
+	var visible_count:=visible_member_count(max_squad_size,current_hp,max_hp)
+	for index in range(squad_members.size()): squad_members[index].visible=index<visible_count
+
+static func visible_member_count(size: int,current_hp: int,max_hp: int) -> int:
+	if size<=0 or current_hp<=0 or max_hp<=0: return 0
+	return clampi(int(ceil(float(size)*float(current_hp)/float(max_hp))),1,size)
+
+static func _formation_offset(index: int,size: int) -> Vector3:
+	if size<=1: return Vector3.ZERO
+	const OFFSETS: Array[Vector2]=[Vector2(-0.24,-0.16),Vector2(0.24,-0.16),Vector2.ZERO,Vector2(-0.18,0.22),Vector2(0.18,0.22)]
+	var p:=OFFSETS[index%OFFSETS.size()]
+	return Vector3(p.x,0.0,p.y)
 
 func sync_position(logical_position: Vector3) -> void:
 	if moving and destination.is_equal_approx(logical_position):

@@ -4,6 +4,7 @@ extends Node
 
 signal status_changed(status: int,message: String)
 signal lobby_changed(players: Array)
+signal lobby_configuration_changed(configuration: Dictionary,capacity: int)
 signal match_announced(config: Dictionary)
 signal command_completed(result: Dictionary)
 signal observation_received(snapshot: Dictionary)
@@ -39,6 +40,12 @@ var match_has_started: bool=false
 var loaded_players: Dictionary[int,bool]={}
 var client_loaded_sent: bool=false
 var awaiting_resynchronization: bool=false
+var lobby_capacity: int=NetworkProtocol.MAX_PLAYERS
+var lobby_match_config: Dictionary={
+	"planet_size":MatchConfig.PlanetSize.SMALL,
+	"world_seed":48293617,
+	"world_population_preset":WorldPopulationConfig.STANDARD,
+}
 
 func _ready() -> void:
 	process_mode=Node.PROCESS_MODE_ALWAYS
@@ -55,19 +62,26 @@ func _process(_delta: float) -> void:
 	if status==Status.LOADING and loading_deadline_ms>0 and now>loading_deadline_ms:
 		_fail("Match synchronization timed out.")
 
-func host_game(listen_port: int,player_name: String,faction_id: String="living_migration") -> Error:
+func host_game(listen_port: int,player_name: String,faction_id: String="living_migration",capacity: int=NetworkProtocol.MAX_PLAYERS,
+		configuration: Dictionary={}) -> Error:
 	shutdown("Starting host")
 	if not NetworkProtocol.valid_port(listen_port): return _set_error(ERR_INVALID_PARAMETER,"Choose a valid UDP port.")
 	var name:=NetworkProtocol.clean_player_name(player_name)
 	if name.is_empty(): return _set_error(ERR_INVALID_PARAMETER,"Enter a player name.")
 	if not _valid_faction(faction_id): return _set_error(ERR_INVALID_PARAMETER,"Choose a playable faction.")
+	if capacity<NetworkProtocol.MIN_PLAYERS or capacity>NetworkProtocol.MAX_PLAYERS:
+		return _set_error(ERR_INVALID_PARAMETER,"Choose two to four player slots.")
+	var config_error:=_lobby_configuration_error(configuration)
+	if not config_error.is_empty(): return _set_error(ERR_INVALID_PARAMETER,config_error)
 	peer=ENetMultiplayerPeer.new()
-	var error:=peer.create_server(listen_port,NetworkProtocol.MAX_PLAYERS-1)
+	var error:=peer.create_server(listen_port,capacity-1)
 	if error!=OK:
 		peer=null
 		return _set_error(error,"Could not host on UDP port %d." % listen_port)
 	multiplayer.multiplayer_peer=peer
 	role=Role.HOST; port=listen_port; local_player_id=1; local_player_name=name; local_faction_id=faction_id
+	lobby_capacity=capacity
+	if not configuration.is_empty(): lobby_match_config=_sanitized_lobby_configuration(configuration)
 	_register_player(1,1,name,faction_id,true,false)
 	_set_status(Status.LOBBY,"Hosting on UDP port %d." % port)
 	_emit_lobby()
@@ -97,6 +111,9 @@ func shutdown(reason: String="Disconnected") -> void:
 	if peer!=null: peer.close()
 	if multiplayer.multiplayer_peer!=null: multiplayer.multiplayer_peer=OfflineMultiplayerPeer.new()
 	peer=null; role=Role.OFFLINE; local_player_id=0; match_has_started=false
+	lobby_capacity=NetworkProtocol.MAX_PLAYERS
+	lobby_match_config={"planet_size":MatchConfig.PlanetSize.SMALL,"world_seed":48293617,
+		"world_population_preset":WorldPopulationConfig.STANDARD}
 	peer_to_player.clear(); player_to_peer.clear(); lobby_players.clear(); loaded_players.clear(); client_loaded_sent=false; awaiting_resynchronization=false
 	command_dispatcher=null; authoritative_state=null; authoritative_rules=null
 	latest_observation.clear(); sync_revision=0; authoritative_sync_revision=0; next_client_sequence=1; last_command_result.clear()
@@ -111,10 +128,20 @@ func set_local_lobby_choice(faction_id: String,ready: bool) -> void:
 	elif role==Role.CLIENT:
 		_rpc_update_lobby.rpc_id(1,faction_id,ready)
 
+func set_host_lobby_configuration(configuration: Dictionary) -> String:
+	if role!=Role.HOST or status!=Status.LOBBY: return "Only the lobby host may configure the match."
+	var error:=_lobby_configuration_error(configuration)
+	if not error.is_empty(): return error
+	lobby_match_config=_sanitized_lobby_configuration(configuration)
+	for player_id: int in lobby_players:
+		var record: Dictionary=lobby_players[player_id]; record.ready=false; lobby_players[player_id]=record
+	_broadcast_lobby()
+	return ""
+
 func can_host_start() -> bool:
-	if role!=Role.HOST or status!=Status.LOBBY or lobby_players.size()<2: return false
+	if role!=Role.HOST or status!=Status.LOBBY or lobby_players.size()<NetworkProtocol.MIN_PLAYERS or lobby_players.size()>lobby_capacity: return false
 	for record: Dictionary in lobby_players.values():
-		if not bool(record.ready): return false
+		if not bool(record.ready) or not bool(record.get("connected",true)): return false
 	return true
 
 func announce_match(config: Dictionary) -> String:
@@ -175,6 +202,12 @@ func abort_match_to_lobby(reason: String="Match aborted.") -> void:
 	if role==Role.HOST:
 		get_tree().paused=false
 		match_has_started=false; command_dispatcher=null; authoritative_state=null; authoritative_rules=null
+		var departed: Array[int]=[]
+		for player_id: int in lobby_players:
+			if not bool(lobby_players[player_id].get("connected",true)): departed.append(player_id)
+		for player_id: int in departed: lobby_players.erase(player_id)
+		for player_id: int in lobby_players:
+			var record: Dictionary=lobby_players[player_id]; record.ready=false; lobby_players[player_id]=record
 		_rpc_match_aborted.rpc(reason)
 		_set_status(Status.LOBBY,reason); _broadcast_lobby()
 	elif role==Role.CLIENT:
@@ -186,15 +219,28 @@ func lobby_records() -> Array[Dictionary]:
 	for player_id: int in ids: result.append(lobby_players[player_id].duplicate(true))
 	return result
 
+func remove_disconnected_player(player_id: int) -> bool:
+	if role!=Role.HOST or status!=Status.INTERRUPTED or authoritative_state==null or not lobby_players.has(player_id): return false
+	var record: Dictionary=lobby_players[player_id]
+	if bool(record.get("connected",true)): return false
+	authoritative_state.set_player_connected(player_id,false)
+	authoritative_state.eliminate_player(player_id,"Disconnected player removed by host")
+	record.eliminated=true; lobby_players[player_id]=record
+	get_tree().paused=false
+	_set_status(Status.ACTIVE,"%s was removed and eliminated." % String(record.player_name))
+	authoritative_sync_revision+=1; _publish_observations(); _broadcast_lobby()
+	_rpc_match_resumed.rpc("%s was removed and eliminated." % String(record.player_name))
+	return true
+
 @rpc("any_peer","call_remote","reliable")
 func _rpc_request_join(payload: Dictionary) -> void:
 	if role!=Role.HOST: return
 	var sender:=multiplayer.get_remote_sender_id()
 	if peer_to_player.has(sender):
-		_rpc_join_accepted.rpc_id(sender,peer_to_player[sender],lobby_records()); return
+		_rpc_join_accepted.rpc_id(sender,peer_to_player[sender],lobby_records(),lobby_match_config.duplicate(true),lobby_capacity); return
 	if match_has_started:
 		_rpc_join_rejected.rpc_id(sender,"Match already started."); return
-	if lobby_players.size()>=NetworkProtocol.MAX_PLAYERS:
+	if lobby_players.size()>=lobby_capacity:
 		_rpc_join_rejected.rpc_id(sender,"Lobby is full."); return
 	var error:=NetworkProtocol.compatibility_error(payload.get("compatibility",{}))
 	if not error.is_empty(): _rpc_join_rejected.rpc_id(sender,error); return
@@ -203,13 +249,13 @@ func _rpc_request_join(payload: Dictionary) -> void:
 	if name.is_empty() or not _valid_faction(faction): _rpc_join_rejected.rpc_id(sender,"Invalid player registration."); return
 	var player_id:=_next_player_id()
 	_register_player(sender,player_id,name,faction,false,false)
-	_rpc_join_accepted.rpc_id(sender,player_id,lobby_records())
+	_rpc_join_accepted.rpc_id(sender,player_id,lobby_records(),lobby_match_config.duplicate(true),lobby_capacity)
 	_broadcast_lobby()
 
 @rpc("authority","call_remote","reliable")
-func _rpc_join_accepted(player_id: int,records: Array) -> void:
+func _rpc_join_accepted(player_id: int,records: Array,configuration: Dictionary={},capacity: int=NetworkProtocol.MAX_PLAYERS) -> void:
 	if role!=Role.CLIENT: return
-	local_player_id=player_id; connection_deadline_ms=0
+	local_player_id=player_id; connection_deadline_ms=0; lobby_capacity=capacity; lobby_match_config=_sanitized_lobby_configuration(configuration)
 	_apply_lobby(records); _set_status(Status.LOBBY,"Connected to lobby.")
 
 @rpc("authority","call_remote","reliable")
@@ -224,8 +270,9 @@ func _rpc_update_lobby(faction_id: String,ready: bool) -> void:
 	_update_player(peer_to_player[sender],faction_id,ready); _broadcast_lobby()
 
 @rpc("authority","call_remote","reliable")
-func _rpc_lobby_state(records: Array) -> void:
-	if role==Role.CLIENT: _apply_lobby(records)
+func _rpc_lobby_state(records: Array,configuration: Dictionary={},capacity: int=NetworkProtocol.MAX_PLAYERS) -> void:
+	if role==Role.CLIENT:
+		lobby_capacity=capacity; lobby_match_config=_sanitized_lobby_configuration(configuration); _apply_lobby(records)
 
 @rpc("authority","call_remote","reliable")
 func _rpc_match_announced(config: Dictionary) -> void:
@@ -260,6 +307,16 @@ func _rpc_match_aborted(reason: String) -> void:
 	if role==Role.CLIENT:
 		match_has_started=false; latest_observation.clear(); sync_revision=0
 		_set_status(Status.LOBBY,reason); session_ended.emit(reason)
+
+@rpc("authority","call_remote","reliable")
+func _rpc_match_interrupted(player_id: int,player_name: String) -> void:
+	if role!=Role.CLIENT: return
+	_set_status(Status.INTERRUPTED,"%s disconnected. Match paused." % player_name)
+	participant_disconnected.emit(player_id,player_name)
+
+@rpc("authority","call_remote","reliable")
+func _rpc_match_resumed(message: String) -> void:
+	if role==Role.CLIENT: _set_status(Status.ACTIVE,message)
 
 func _server_process_command(peer_id: int,command: Dictionary) -> void:
 	if role!=Role.HOST or status!=Status.ACTIVE or command_dispatcher==null: return
@@ -313,18 +370,27 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	if role!=Role.HOST or not peer_to_player.has(peer_id): return
 	var player_id:=peer_to_player[peer_id]
 	var record: Dictionary=lobby_players.get(player_id,{})
-	peer_to_player.erase(peer_id); player_to_peer.erase(player_id); lobby_players.erase(player_id)
+	peer_to_player.erase(peer_id); player_to_peer.erase(player_id)
 	if command_dispatcher!=null: command_dispatcher.unregister_peer(peer_id)
 	if match_has_started:
+		record.connected=false; record.ready=false; lobby_players[player_id]=record
+		if authoritative_state!=null: authoritative_state.set_player_connected(player_id,false)
 		get_tree().paused=true
 		_set_status(Status.INTERRUPTED,"%s disconnected. Match paused." % String(record.get("player_name","Player")))
+		_rpc_match_interrupted.rpc(player_id,String(record.get("player_name","Player")))
 		participant_disconnected.emit(player_id,String(record.get("player_name","Player")))
-	else: _broadcast_lobby()
+	else:
+		lobby_players.erase(player_id)
+		for remaining_id: int in lobby_players:
+			var remaining: Dictionary=lobby_players[remaining_id]; remaining.ready=false; lobby_players[remaining_id]=remaining
+		_broadcast_lobby()
 
 func _register_player(peer_id: int,player_id: int,name: String,faction_id: String,host: bool,ready: bool) -> void:
 	peer_to_player[peer_id]=player_id; player_to_peer[player_id]=peer_id
 	lobby_players[player_id]={"player_id":player_id,"peer_id":peer_id,"player_name":name,"faction_id":faction_id,
-		"ready":ready,"host":host}
+		"ready":ready,"host":host,"connected":true,"eliminated":false,
+		"player_color":PlayerIdentity.color_hex_for_slot(maxi(0,player_id-1)),
+		"color_name":PlayerIdentity.color_name_for_slot(maxi(0,player_id-1))}
 
 func _finish_loading_if_ready() -> void:
 	if role!=Role.HOST or authoritative_state==null: return
@@ -335,15 +401,21 @@ func _finish_loading_if_ready() -> void:
 func _update_player(player_id: int,faction_id: String,ready: bool) -> void:
 	if not lobby_players.has(player_id): return
 	var record: Dictionary=lobby_players[player_id]
-	record.faction_id=faction_id; record.ready=ready; lobby_players[player_id]=record
+	var changed:=String(record.faction_id)!=faction_id
+	record.faction_id=faction_id; record.ready=false if changed else ready; lobby_players[player_id]=record
+	if player_id==local_player_id: local_faction_id=faction_id
 
 func _next_player_id() -> int:
-	for id in range(1,NetworkProtocol.MAX_PLAYERS+1):
+	for id in range(1,lobby_capacity+1):
 		if not lobby_players.has(id): return id
 	return -1
 
 func _broadcast_lobby() -> void:
-	var records:=lobby_records(); _emit_lobby(); _rpc_lobby_state.rpc(records)
+	var records:=lobby_records(); _emit_lobby()
+	var connected_peers:=multiplayer.get_peers()
+	for peer_id: int in peer_to_player:
+		if peer_id!=1 and peer_id in connected_peers:
+			_rpc_lobby_state.rpc_id(peer_id,records,lobby_match_config.duplicate(true),lobby_capacity)
 
 func _apply_lobby(records: Array) -> void:
 	lobby_players.clear(); peer_to_player.clear(); player_to_peer.clear()
@@ -352,13 +424,29 @@ func _apply_lobby(records: Array) -> void:
 		var record: Dictionary=(item as Dictionary).duplicate(true)
 		var player_id:=int(record.get("player_id",0)); var peer_id:=int(record.get("peer_id",0))
 		lobby_players[player_id]=record; peer_to_player[peer_id]=player_id; player_to_peer[player_id]=peer_id
+		if player_id==local_player_id: local_faction_id=String(record.get("faction_id",local_faction_id))
 	_emit_lobby()
 
-func _emit_lobby() -> void: lobby_changed.emit(lobby_records())
+func _emit_lobby() -> void:
+	lobby_changed.emit(lobby_records())
+	lobby_configuration_changed.emit(lobby_match_config.duplicate(true),lobby_capacity)
 
 func _valid_faction(faction_id: String) -> bool:
 	var definition:=ContentRegistry.default().faction(faction_id)
-	return definition!=null and definition.playable
+	return definition!=null and definition.playable and faction_id in NetworkProtocol.MULTIPLAYER_FACTIONS
+
+func _lobby_configuration_error(configuration: Dictionary) -> String:
+	if configuration.is_empty(): return ""
+	var size:=int(configuration.get("planet_size",MatchConfig.PlanetSize.SMALL))
+	if size not in MatchConfig.normal_planet_sizes(): return "Choose Small or Medium planet size."
+	if String(configuration.get("world_population_preset",WorldPopulationConfig.STANDARD)) not in WorldPopulationConfig.PRESETS:
+		return "Choose a valid world population preset."
+	return ""
+
+func _sanitized_lobby_configuration(configuration: Dictionary) -> Dictionary:
+	return {"planet_size":int(configuration.get("planet_size",MatchConfig.PlanetSize.SMALL)),
+		"world_seed":int(configuration.get("world_seed",48293617)),
+		"world_population_preset":String(configuration.get("world_population_preset",WorldPopulationConfig.STANDARD))}
 
 func _set_status(value: Status,message: String) -> void:
 	status=value; status_message=message; status_changed.emit(status,message)

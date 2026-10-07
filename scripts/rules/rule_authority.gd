@@ -7,6 +7,8 @@ static func actor_error(state: GameState,actor: int) -> String:
 	if state.turn_state.neutral_phase:
 		if state.controllers[actor].kind!=ControllerState.NEUTRAL_AI: return "Neutral activity is in progress."
 		return ""
+	if state.turn_state.phase==TurnState.COMBAT_PLANNING: return "Combat planning is in progress."
 	if not state.players.has(actor): return "Unknown player."
+	if state.players[actor].eliminated: return "This player has been eliminated."
 	if actor!=state.active_player: return "It is Player %d's turn." % state.active_player
 	return ""

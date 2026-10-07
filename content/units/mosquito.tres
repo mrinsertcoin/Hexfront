@@ -11,6 +11,7 @@ attack_damage = 2
 costs = {"food": 2, "synapse": 1}
 upkeep = {"food": 1}
 corpse_food_value = 1
+squad_size = 5
 temporary_lifetime_turns = 4
 tags = PackedStringArray("marsh_unit", "temporary", "morale_immune", "disease_immune")
 vision_range = 4

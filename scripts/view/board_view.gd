@@ -76,6 +76,7 @@ var notification_feed: StrategicNotificationFeed
 var privacy_overlay: PanelContainer
 var privacy_label: Label
 var turn_label: Label
+var players_label: Label
 var unit_label: Label
 var feedback_label: Label
 var end_turn_button: Button
@@ -116,6 +117,15 @@ var supply_overlay_visible: bool = false
 var population_debug_visible: bool=false
 var network_session: NetworkSession
 var network_indicator: Label
+var minimap: StrategicMinimap
+var management_panel: VBoxContainer
+var next_unit_button: Button
+var manage_cities_button: Button
+var select_research_button: Button
+var model_preview: ModelPreview
+var reviewed_units: Dictionary[int,bool]={}
+var reviewed_cities: Dictionary[int,bool]={}
+var management_turn_serial: int=-1
 
 
 func configure_match(config: MatchConfig, settings: UserSettings) -> void:
@@ -163,14 +173,24 @@ func _ready() -> void:
 	var faction_ids: Array[String]=["blue","red"]
 	var controller_kinds: Array[String]=[ControllerState.HUMAN,ControllerState.PLAYER_AI]
 	var team_ids: Array[int]=[1,2]
+	var player_ids: Array[int]=[1,2]
+	var player_names: Array[String]=["Player 1","Player 2"]
+	var player_colors: Array[String]=[]
 	if match_config!=null:
 		faction_ids=match_config.faction_ids(); controller_kinds=match_config.controller_kinds(); team_ids=match_config.team_ids()
-	game_state = GameState.new(grid,{"faction_ids":faction_ids,"controller_kinds":controller_kinds,"team_ids":team_ids})
+		player_ids=match_config.player_ids(); player_names=match_config.player_names()
+		if not match_config.player_assignments.is_empty(): player_colors=match_config.player_colors()
+	var start_suitability:=_build_start_suitability(player_ids,faction_ids)
+	game_state = GameState.new(grid,{"faction_ids":faction_ids,"controller_kinds":controller_kinds,"team_ids":team_ids,
+		"player_ids":player_ids,"player_names":player_names,"player_colors":player_colors,
+		"start_suitability":start_suitability,"start_seed":generation_config.world_seed,"match_seed":generation_config.world_seed,
+		"water_cells":_water_cell_ids(),"simultaneous_combat":true})
 	if population_config==null: population_config=WorldPopulationConfig.new()
 	population_config.start_cells=_player_start_cells()
 	population_result=WorldPopulationGenerator.generate(generated_planet,game_state.registry,population_config)
 	game_state.apply_population(population_result)
 	print(population_result.summary())
+	for player_id: int in game_state.start_diagnostics: print("FFA start P%d: %s" % [player_id,game_state.start_diagnostics[player_id]])
 	rules = GameRules.new(game_state)
 	print("PlanetGrid version=", grid.grid_generation_version, " subdivision=", subdivision_level,
 		" cells=", grid.get_cell_count(), " pentagons=12 fingerprint=", grid.fingerprint)
@@ -283,12 +303,16 @@ func _sync_units() -> void:
 			health_fills.erase(id)
 	for unit: GameState.Unit in game_state.units.values():
 		if not unit_views.has(unit.id):
-			_create_entity_view(unit.id, unit.owner_id, unit.definition_id, false)
+			var unit_definition:=game_state.registry.unit(unit.definition_id)
+			var unit_visual_id: String=unit_definition.visual_id if unit_definition!=null and not unit_definition.visual_id.is_empty() else unit.definition_id
+			_create_entity_view(unit.id, unit.owner_id, unit_visual_id, false)
 		_update_entity_view(unit.id, unit.cell_id, unit.hp, unit.max_hp)
 		unit_views[unit.id].visible=visibility_omniscient or (view_observation!=null and view_observation.can_observe_entity(unit.id))
 	for structure: GameState.Structure in game_state.structures.values():
 		if not unit_views.has(structure.id):
-			_create_entity_view(structure.id, structure.owner_id, structure.definition_id, true)
+			var structure_definition:=game_state.registry.structure(structure.definition_id)
+			var structure_visual_id: String=structure_definition.visual_id if structure_definition!=null and not structure_definition.visual_id.is_empty() else structure.definition_id
+			_create_entity_view(structure.id, structure.owner_id, structure_visual_id, true)
 		_update_entity_view(structure.id, structure.cell_id, structure.hp, structure.max_hp)
 		unit_views[structure.id].visible=visibility_omniscient or (view_observation!=null and view_observation.can_observe_entity(structure.id))
 	_sync_sites()
@@ -306,7 +330,9 @@ func _sync_sites() -> void:
 		site_views[site.id].visible=visibility_omniscient or (view_observation!=null and view_observation.has_discovered_site(site.id))
 
 func _sync_contacts() -> void:
-	var known: Dictionary[int,Dictionary]=view_observation.known_contacts if view_observation!=null and not visibility_omniscient else {}
+	var known: Dictionary[int,Dictionary]={}
+	if view_observation!=null and not visibility_omniscient:
+		known=view_observation.known_contacts
 	for id: int in contact_views.keys():
 		if not known.has(id): contact_views[id].queue_free(); contact_views.erase(id)
 	for id: int in known:
@@ -376,6 +402,11 @@ func _create_entity_view(id: int, owner_id: int, kind: String, is_structure: boo
 		var asset: PackedScene = visual_map.asset_scene(kind)
 		if asset != null:
 			model_root.add_child(asset.instantiate())
+	var model_profile:=visual_map.model_definition(kind)
+	if model_profile!=null:
+		model_root.scale=model_profile.model_scale
+		model_root.rotation_degrees=model_profile.rotation_offset_degrees
+		model_root.position.y=model_profile.height_offset
 	if model_root.get_child_count() == 0:
 		var placeholder := MeshInstance3D.new()
 		var size:=Vector3(1.1,0.7,1.1) if is_structure or kind=="living_spider" else Vector3(0.6,0.65,0.6)
@@ -419,6 +450,9 @@ func _create_entity_view(id: int, owner_id: int, kind: String, is_structure: boo
 	health_fills[id] = fill
 	view.terrain_surface = terrain_surface
 	view.configure(wrapper)
+	if not is_structure:
+		var definition:=game_state.registry.unit(kind)
+		view.configure_squad(wrapper,definition.squad_size if definition!=null else 1)
 	view.movement_finished.connect(_refresh_display)
 
 func _update_entity_view(id: int, cell_id: int, hp: int, max_hp: int) -> void:
@@ -427,6 +461,14 @@ func _update_entity_view(id: int, cell_id: int, hp: int, max_hp: int) -> void:
 	var fraction: float = float(hp) / max_hp
 	health_fills[id].scale.x = fraction
 	health_fills[id].position.x = -0.44 * (1.0 - fraction)
+	if game_state.units.has(id): unit_views[id].sync_squad_health(hp,max_hp)
+
+func _water_cell_ids() -> Array[int]:
+	var result: Array[int]=[]
+	if generated_planet==null: return result
+	for data: PlanetWorldCellData in generated_planet.cell_world_data:
+		if data.hydrology!=null and data.hydrology.surface_water_type!=HydrologyCellData.SurfaceWater.NONE: result.append(data.cell_id)
+	return result
 
 func _create_turn_hud(hud: CanvasLayer) -> void:
 	top_bar=PanelContainer.new(); top_bar.name="TopBar"; top_bar.mouse_filter=Control.MOUSE_FILTER_STOP; hud.add_child(top_bar)
@@ -440,7 +482,7 @@ func _create_turn_hud(hud: CanvasLayer) -> void:
 		network_indicator.text="Host P%d | %s" % [network_session.local_player_id,network_session.status_message]
 		network_session.status_changed.connect(_network_status_changed)
 	resource_bar=HBoxContainer.new(); resource_bar.name="ResourceBar"; resource_bar.size_flags_horizontal=Control.SIZE_EXPAND_FILL; resource_bar.add_theme_constant_override("separation",8); top_row.add_child(resource_bar)
-	var research_button:=Button.new(); research_button.name="ResearchButton"; research_button.text="Research  [R]"; research_button.focus_mode=Control.FOCUS_NONE; research_button.pressed.connect(_toggle_research); top_row.add_child(research_button)
+	var research_button:=Button.new(); research_button.name="ResearchButton"; research_button.text="📖 Research  [R]"; research_button.tooltip_text="Toggle Research Overlay"; research_button.focus_mode=Control.FOCUS_NONE; research_button.pressed.connect(_toggle_research); top_row.add_child(research_button)
 	end_turn_button=Button.new(); end_turn_button.name="EndTurnButton"; end_turn_button.custom_minimum_size.x=150; end_turn_button.focus_mode=Control.FOCUS_NONE; end_turn_button.pressed.connect(request_end_turn); top_row.add_child(end_turn_button)
 
 	hud_panel = PanelContainer.new()
@@ -475,6 +517,10 @@ func _create_turn_hud(hud: CanvasLayer) -> void:
 	details.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	details.add_theme_constant_override("separation", 10)
 	scroll.add_child(details)
+	model_preview=ModelPreview.new(); model_preview.name="ModelPreview"; details.add_child(model_preview)
+	players_label=_hud_label(details)
+	players_label.name="MultiplayerPlayers"
+	players_label.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
 	var legend: Label = _hud_label(details)
 	var names:=PackedStringArray()
 	for player_id: int in game_state.players:
@@ -507,6 +553,11 @@ func _create_turn_hud(hud: CanvasLayer) -> void:
 	var privacy_column:=VBoxContainer.new(); privacy_column.name="PrivacyColumn"; privacy_column.custom_minimum_size=Vector2(360,150); privacy_column.add_theme_constant_override("separation",18); privacy_center.add_child(privacy_column)
 	privacy_label=Label.new(); privacy_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER; privacy_label.add_theme_font_size_override("font_size",28); privacy_column.add_child(privacy_label)
 	var ready:=Button.new(); ready.name="ReadyButton"; ready.text="Reveal my view"; ready.custom_minimum_size.y=52; ready.pressed.connect(_dismiss_privacy); privacy_column.add_child(ready)
+	management_panel=VBoxContainer.new(); management_panel.name="ManagementWorkflow"; management_panel.add_theme_constant_override("separation",6); hud.add_child(management_panel)
+	next_unit_button=Button.new(); next_unit_button.name="NextUnitButton"; next_unit_button.text="Next Unit"; next_unit_button.pressed.connect(_next_manageable_unit); management_panel.add_child(next_unit_button)
+	manage_cities_button=Button.new(); manage_cities_button.name="ManageCitiesButton"; manage_cities_button.text="Manage Cities"; manage_cities_button.pressed.connect(_next_manageable_city); management_panel.add_child(manage_cities_button)
+	select_research_button=Button.new(); select_research_button.name="SelectResearchButton"; select_research_button.text="Select Research"; select_research_button.pressed.connect(_toggle_research); management_panel.add_child(select_research_button)
+	minimap=StrategicMinimap.new(); minimap.name="Minimap"; minimap.cell_focused.connect(focus_cell.bind(true)); management_panel.add_child(minimap)
 	_layout_hud()
 	get_viewport().size_changed.connect(_layout_hud)
 
@@ -552,14 +603,17 @@ func _layout_hud() -> void:
 	var right_width:=clampf(viewport_size.x*0.25,320.0*scale,430.0*scale)
 	var top_height:=58.0*scale
 	top_bar.position=Vector2(margin,margin); top_bar.size=Vector2(maxf(420.0,viewport_size.x-margin*2.0),top_height)
-	hud_panel.position = Vector2(maxf(0.0, viewport_size.x-right_width-margin),top_height+margin*2.0)
+	hud_panel.position = Vector2(margin,top_height+margin*2.0)
 	hud_panel.size = Vector2(right_width,maxf(230.0,viewport_size.y-top_height-margin*3.0))
 	var action_width:=minf(620.0*scale,maxf(300.0,viewport_size.x-right_width-margin*4.0))
 	action_panel.position=Vector2((viewport_size.x-right_width-action_width)/2.0,viewport_size.y-220.0*scale-margin)
 	action_panel.size=Vector2(action_width,208.0*scale)
 	strategic_panel.position=Vector2(margin,top_height+margin*2.0); strategic_panel.size=Vector2(minf(570.0*scale,viewport_size.x-right_width-margin*3.0),viewport_size.y-top_height-margin*3.0)
 	var feed_height:=minf(178.0*scale,28.0*scale+34.0*scale*maxi(1,notification_feed.records.size()))
-	notification_feed.position=Vector2(margin,top_height+margin*2.0); notification_feed.size=Vector2(minf(430.0*scale,viewport_size.x-right_width-margin*3.0),feed_height)
+	notification_feed.position=Vector2(margin+right_width+margin,top_height+margin*2.0); notification_feed.size=Vector2(minf(430.0*scale,viewport_size.x-right_width-margin*3.0),feed_height)
+	if management_panel!=null:
+		management_panel.position=Vector2(viewport_size.x-270.0*scale-margin,viewport_size.y-250.0*scale-margin)
+		management_panel.size=Vector2(270.0*scale,250.0*scale)
 	coordinate_label.position=Vector2(margin+6.0,notification_feed.position.y+notification_feed.size.y+8.0)
 	if privacy_overlay!=null: privacy_overlay.position=Vector2.ZERO; privacy_overlay.size=viewport_size
 
@@ -621,6 +675,64 @@ func _cycle_controllable(direction: int) -> void:
 	selected=unit.cell_id; selected_unit_id=unit.id; selected_structure_id=-1; selected_site_id=-1; selected_district_id=-1
 	_focus_selected(); _refresh_display()
 
+func _reset_management_queues_if_needed() -> void:
+	if game_state.turn_state.phase!=TurnState.MANAGEMENT: return
+	if management_turn_serial==game_state.turn_state.serial: return
+	management_turn_serial=game_state.turn_state.serial; reviewed_units.clear(); reviewed_cities.clear()
+
+func _manageable_unit_ids(controller_id: int) -> Array[int]:
+	var ids: Array[int]=[]
+	for unit: GameState.Unit in game_state.units.values():
+		if unit.controller_id==controller_id and unit.hp>0 and not unit.moved and not unit.attacked and not reviewed_units.has(unit.id): ids.append(unit.id)
+	ids.sort(); return ids
+
+func _manageable_city_ids(controller_id: int) -> Array[int]:
+	var ids: Array[int]=[]
+	for unit: GameState.Unit in game_state.units.values():
+		if unit.controller_id==controller_id and unit.spider_state!=null and not reviewed_cities.has(unit.id): ids.append(unit.id)
+	for structure: GameState.Structure in game_state.structures.values():
+		if structure.controller_id==controller_id and structure.pillar_state!=null and not reviewed_cities.has(structure.id): ids.append(structure.id)
+	ids.sort(); return ids
+
+func _next_manageable_unit() -> void:
+	var controller:=_view_controller_id()
+	if selected_unit_id>=0: reviewed_units[selected_unit_id]=true
+	var ids:=_manageable_unit_ids(controller)
+	if ids.is_empty(): _refresh_display(); return
+	var unit: GameState.Unit=game_state.units[ids[0]]; selected=unit.cell_id; selected_unit_id=unit.id; selected_structure_id=-1
+	_focus_selected(); _refresh_display()
+
+func _next_manageable_city() -> void:
+	var controller:=_view_controller_id(); var current:=selected_unit_id if selected_unit_id>=0 and game_state.units.has(selected_unit_id) and game_state.units[selected_unit_id].spider_state!=null else selected_structure_id
+	if current>=0: reviewed_cities[current]=true
+	var ids:=_manageable_city_ids(controller)
+	if ids.is_empty(): _refresh_display(); return
+	var id:=ids[0]
+	if game_state.units.has(id): selected_unit_id=id; selected_structure_id=-1; selected=game_state.units[id].cell_id
+	else: selected_structure_id=id; selected_unit_id=-1; selected=game_state.structures[id].cell_id
+	_focus_selected(); _refresh_display()
+
+func _refresh_management_workflow(controller_id: int,can_act: bool) -> void:
+	if not game_state.turn_state.combat_planning_enabled:
+		next_unit_button.visible=false; manage_cities_button.visible=false; select_research_button.visible=false
+		end_turn_button.visible=true; return
+	_reset_management_queues_if_needed()
+	var management:=game_state.turn_state.phase==TurnState.MANAGEMENT and can_act
+	var units: Array[int]=[]; var cities: Array[int]=[]
+	if management: units=_manageable_unit_ids(controller_id); cities=_manageable_city_ids(controller_id)
+	next_unit_button.visible=management and not units.is_empty()
+	manage_cities_button.visible=management and not cities.is_empty()
+	var queues_done:=units.is_empty() and cities.is_empty()
+	var player: PlayerState=game_state.players.get(controller_id)
+	var needs_research:=player!=null and player.research.current_technology_id.is_empty() and not rules.available_technologies(controller_id).is_empty()
+	select_research_button.visible=management and queues_done and needs_research
+	end_turn_button.visible=management and queues_done and not needs_research
+	if game_state.turn_state.phase==TurnState.COMBAT_PLANNING:
+		end_turn_button.visible=true; end_turn_button.text="Ready / Lock Combat"; end_turn_button.disabled=state_locked_for_view(controller_id)
+
+func state_locked_for_view(controller_id: int) -> bool:
+	return game_state.combat_planning.is_locked(controller_id)
+
 func _focus_notification(cell_id: int,entity_id: int) -> void:
 	if entity_id>=0:
 		if game_state.units.has(entity_id): cell_id=game_state.units[entity_id].cell_id
@@ -638,7 +750,10 @@ func _handle_mode_click(screen_position: Vector2) -> void:
 	if input_mode==StrategicInputMode.Kind.ATTACK:
 		var target:=game_state.entity_at(cell_id)
 		var result:=GameRules.Result.new(false,"Choose a highlighted hostile target.")
-		if target!=null: result=_network_command(CommandDispatcher.ATTACK,{"attacker_id":mode_source_id,"target_id":target.id}) if network_session!=null else rules.try_attack(game_state.active_player,mode_source_id,target.id)
+		var combat_actor:=_view_controller_id() if game_state.turn_state.phase==TurnState.COMBAT_PLANNING else game_state.active_player
+		if target!=null:
+			if game_state.turn_state.combat_planning_enabled: result=_network_command(CommandDispatcher.COMBAT_INTENT,{"unit_id":mode_source_id,"option_id":"attack","target_id":target.id}) if network_session!=null else rules.submit_combat_intent(combat_actor,mode_source_id,"attack",target.id)
+			else: result=rules.try_attack(combat_actor,mode_source_id,target.id)
 		if result.success: cancel_input_mode(false)
 		_apply_ui_result(result,cell_id,target.id if target!=null else -1); return
 	if input_mode==StrategicInputMode.Kind.ROAD:
@@ -875,6 +990,10 @@ func request_move_at(screen_position: Vector2) -> void:
 func request_end_turn() -> void:
 	if _human_action_blocked():
 		return
+	if game_state.turn_state.phase==TurnState.COMBAT_PLANNING:
+		var combat_actor:=_view_controller_id()
+		var combat_result:=_network_command(CommandDispatcher.LOCK_COMBAT,{}) if network_session!=null else rules.lock_combat(combat_actor)
+		_feedback(combat_result.reason); _refresh_display(); _queue_ai_turn(); return
 	var actor:=game_state.active_player
 	var player:=game_state.players[actor]
 	if player.research.current_technology_id.is_empty() and not rules.available_technologies(actor).is_empty():
@@ -937,11 +1056,12 @@ func _post_turn_events(controller_id: int,before: Dictionary) -> void:
 func _reset_camera() -> void:
 	var home_cell:=0
 	var best_id:=2147483647
+	var focus_controller:=_view_controller_id()
 	for unit: GameState.Unit in game_state.units.values():
-		if unit.controller_id==1 and "headquarters" in game_state.registry.unit(unit.definition_id).tags and unit.id<best_id:
+		if unit.controller_id==focus_controller and "headquarters" in game_state.registry.unit(unit.definition_id).tags and unit.id<best_id:
 			best_id=unit.id; home_cell=unit.cell_id
 	for structure: GameState.Structure in game_state.structures.values():
-		if structure.controller_id==1 and "headquarters" in game_state.registry.structure(structure.definition_id).tags and structure.id<best_id:
+		if structure.controller_id==focus_controller and "headquarters" in game_state.registry.structure(structure.definition_id).tags and structure.id<best_id:
 			best_id=structure.id; home_cell=structure.cell_id
 	navigation.reset(grid.get_cell(home_cell).up)
 	_is_middle_dragging = false
@@ -1126,7 +1246,8 @@ func _refresh_display() -> void:
 	var presenting: bool = is_presenting()
 	var neutral_phase:=game_state.turn_state.neutral_phase
 	var view_controller:=_view_controller_id()
-	var human_turn: bool = not neutral_phase and player_controllers.get(game_state.active_player,"") == "Human" and game_state.active_player==view_controller
+	var planning:=game_state.turn_state.phase==TurnState.COMBAT_PLANNING
+	var human_turn: bool = not neutral_phase and ((planning and player_controllers.get(view_controller,"")=="Human") or (not planning and player_controllers.get(game_state.active_player,"")=="Human" and game_state.active_player==view_controller))
 	var can_act: bool = human_turn and not presenting
 	road_highlights.clear()
 	site_highlights.clear()
@@ -1135,11 +1256,11 @@ func _refresh_display() -> void:
 		site_highlights=[highlighted_site.cell_id]
 		site_highlights.append_array(grid.get_neighbors(highlighted_site.cell_id))
 	reachable_tiles.clear()
-	if can_act:
+	if can_act and not planning:
 		reachable_tiles = rules.reachable(game_state.active_player, selected_unit_id)
 	attack_tiles.clear()
-	if can_act:
-		for id: int in rules.attack_targets(game_state.active_player, selected_unit_id):
+	if can_act and (planning or not game_state.turn_state.combat_planning_enabled):
+		for id: int in rules.attack_targets(view_controller, selected_unit_id):
 			if game_state.units.has(id):
 				attack_tiles.append(game_state.units[id].cell_id)
 			else:
@@ -1160,24 +1281,35 @@ func _refresh_display() -> void:
 		world_debug_panel.inspect_cell(selected)
 	_refresh_tile_materials()
 	_update_label()
-	if neutral_phase:
+	if planning:
+		turn_label.text="Round %d · Simultaneous Combat Planning" % game_state.round_number
+		materials_label.text="Choose Attack, Dodge, or Counter, then lock combat."
+	elif neutral_phase:
 		turn_label.text="Neutral activity · Round %d" % game_state.round_number
 		materials_label.text="Wildlife and guardians are resolving bounded actions."
 	else:
 		var active_player:=game_state.players[game_state.active_player]
 		var active_faction:=game_state.registry.faction(active_player.faction_id)
-		turn_label.text = "%s · Player %d · Round %d · %s" % [active_faction.display_name,game_state.active_player,
-			game_state.round_number,"AI Thinking…" if not human_turn else "Human"]
+		var active_slot:=game_state.turn_state.order.find(game_state.active_player)
+		turn_label.text = "Round %d · P%d %s · %s · %s" % [game_state.round_number,game_state.active_player,
+			PlayerIdentity.color_name_for_slot(active_slot),active_faction.display_name,
+			"AI Thinking…" if not human_turn else ("Your turn" if game_state.active_player==view_controller else "Remote turn")]
 		materials_label.text = _resource_text(view_controller)
+	if players_label!=null: players_label.text=_player_overview_text()
 	_refresh_resource_bar(view_controller)
-	end_turn_button.text = "Neutral activity..." if neutral_phase else "End Turn - Player %d" % game_state.active_player
+	end_turn_button.text = "Neutral activity..." if neutral_phase else "End Turn P%d" % game_state.active_player
 	end_turn_button.disabled = game_state.winner_id != 0 or not can_act
 	if presenting:
 		end_turn_button.text = "Moving..."
 	restart_button.visible = game_state.winner_id != 0 and network_session==null
 	if game_state.winner_id != 0:
-		turn_label.text = "Player %d wins" % game_state.winner_id
+		var winner: PlayerState=game_state.players[game_state.winner_id]
+		var winner_faction:=game_state.registry.faction(winner.faction_id)
+		turn_label.text = "%s wins as %s · Round %d · %ds" % [winner.player_name,
+			winner_faction.display_name if winner_faction!=null else winner.faction_id,game_state.round_number,game_state.match_duration_seconds()]
 	if strategic_panel.visible and not neutral_phase: strategic_panel.configure(rules,view_controller)
+	_refresh_management_workflow(view_controller,can_act)
+	if minimap!=null: minimap.configure(game_state,view_observation,view_controller,navigation.focus_direction)
 	_clear_recruit_box()
 	if selected_unit_id != -1:
 		var unit: GameState.Unit = game_state.units[selected_unit_id]
@@ -1192,12 +1324,18 @@ func _refresh_display() -> void:
 			unit.owner_id, unit.unit_type, unit.id, unit.cell_id, unit.hp, unit.max_hp,
 			unit.movement, unit.attack_damage, unit.attack_range, move_status, attack_status,
 		]
+		var unit_definition:=game_state.registry.unit(unit.definition_id)
+		if model_preview!=null: model_preview.show_model(unit_definition.visual_id if not unit_definition.visual_id.is_empty() else unit.definition_id)
+		if unit_definition.squad_size>1: unit_label.text+="\nSquad members: %d/%d" % [EntityView.visible_member_count(unit_definition.squad_size,unit.hp,unit.max_hp),unit_definition.squad_size]
+		if unit.counter_cooldown_remaining>0: unit_label.text+="\nCounter cooldown: %d rounds" % unit.counter_cooldown_remaining
 		if unit.ready_next_turn:
 			unit_label.text += "\nReady next turn."
+		if unit.controller_id==view_controller:
+			unit_label.text += "\nUpkeep: %s (%s)" % [_resource_record(game_state.registry.unit(unit.definition_id).upkeep),"paid" if unit.upkeep_paid else "UNPAID — production inactive"]
 		if unit.remaining_lifetime_turns>0: unit_label.text += "\nLifetime: %d owner turns" % unit.remaining_lifetime_turns
 		if unit.development!=null:
-			unit_label.text += "\nDevelopment: %d/%d | Nutrients: %d/%d" % [unit.development.progress_turns,
-				unit.development.required_turns,unit.development.nutrients_collected,unit.development.required_nutrients]
+			unit_label.text += "\nDevelopment: %d/%d | Food: %d | Matter: %d" % [unit.development.progress_turns,
+				unit.development.required_turns,unit.development.stored_food,unit.development.stored_matter]
 		if unit.active_disease!=null: unit_label.text += "\nDisease: %s (%d)" % [unit.active_disease.definition_id.capitalize(),unit.active_disease.remaining_turns]
 		if unit.designation!=null: unit_label.text += "\nDesignated: %d turns" % unit.designation.remaining_turns
 		if "deployable_artillery" in game_state.registry.unit(unit.definition_id).tags:
@@ -1211,9 +1349,13 @@ func _refresh_display() -> void:
 			var relationship:=game_state.relationships.between(view_controller,unit.controller_id)
 			var relationship_name: String=RelationshipState.Kind.keys()[relationship].capitalize()
 			unit_label.text += "\n%s unit: inspection only." % relationship_name
-		elif can_act:
+		elif can_act and not planning:
 			_action_button("Move — choose green cell",_begin_target_mode.bind(StrategicInputMode.Kind.MOVE,unit.id),"Movement range and destination are validated by the movement rules.","Unit has spent movement." if unit.moved or unit.attacked else ("No legal destination." if reachable_tiles.is_empty() else ""))
-			_action_button("Attack — choose purple target",_begin_target_mode.bind(StrategicInputMode.Kind.ATTACK,unit.id),"Range, relationship, damage, and action state are validated by combat rules.","Unit has attacked." if unit.attacked else ("No target in range." if attack_tiles.is_empty() else ""))
+			if not game_state.turn_state.combat_planning_enabled: _action_button("Attack — choose purple target",_begin_target_mode.bind(StrategicInputMode.Kind.ATTACK,unit.id),"Legacy immediate combat test mode.","No target in range." if attack_tiles.is_empty() else "")
+		elif can_act and planning and unit.controller_id==view_controller:
+			_action_button("Attack — choose purple target",_begin_target_mode.bind(StrategicInputMode.Kind.ATTACK,unit.id),"Damage resolves only after every living player locks.","No visible legal target." if attack_tiles.is_empty() else "")
+			_action_button("Dodge",_submit_combat_option.bind(unit.id,"dodge"),"Reduce every incoming hit by 2 this resolution.")
+			_action_button("Counter",_submit_combat_option.bind(unit.id,"counter"),"Block 2 and retaliate for 2 against the first incoming hit. Cooldown: 2 rounds.","Cooldown: %d rounds" % unit.counter_cooldown_remaining if unit.counter_cooldown_remaining>0 else "")
 		if unit.controller_id==view_controller and unit.spider_state!=null and can_act:
 			_populate_spider_panel(unit)
 		elif unit.controller_id==view_controller and "disease_carrier" in game_state.registry.unit(unit.definition_id).tags and can_act:
@@ -1224,15 +1366,16 @@ func _refresh_display() -> void:
 				var detail:="%s\nDuration: %d turns | Immunity: %d turns\nDamage/turn: %d | Attack reduction: %d" % [
 					disease.description if not disease.description.is_empty() else "Temporary mite-delivered disease.",disease.duration_turns,disease.immunity_turns,disease.damage_per_turn,disease.attack_damage_reduction]
 				_action_button("Select "+disease.display_name,_select_disease_ui.bind(unit.id,disease_id),detail)
-		elif "road_builder" in game_state.registry.unit(unit.definition_id).tags and can_act:
-			var road_button:=Button.new(); road_button.text="Extend ant road (up to 3)"; road_button.focus_mode=Control.FOCUS_NONE
-			road_button.disabled=road_highlights.is_empty(); road_button.tooltip_text="Choose highlighted cells. Costs and limits are validated by the road rules."
-			road_button.pressed.connect(_begin_road_mode.bind(unit.id)); recruit_box.add_child(road_button)
-		elif unit.development!=null and unit.development.is_complete() and can_act:
-			for outcome_id: String in unit.development.outcome_unit_ids:
-				if rules.research_rules.is_unit_unlocked(unit.controller_id,outcome_id):
-					var transform:=Button.new(); transform.text="Transform: "+game_state.registry.unit(outcome_id).display_name
-					transform.focus_mode=Control.FOCUS_NONE; transform.pressed.connect(_transform_selected.bind(unit.id,outcome_id)); recruit_box.add_child(transform)
+		elif unit.development!=null and unit.development.has_consumed and can_act:
+			for outcome_id: String in rules.living_migration_rules.available_transformations(unit.controller_id,unit.id):
+				var transform:=Button.new(); transform.text="Transform: "+game_state.registry.unit(outcome_id).display_name
+				transform.focus_mode=Control.FOCUS_NONE; transform.pressed.connect(_transform_selected.bind(unit.id,outcome_id)); recruit_box.add_child(transform)
+		if can_act and not planning and unit.definition_id in ["dragonfly","mosquito"]:
+			_action_button("Lay Larva",_lay_larva_auto.bind(unit.id),"Lay on a water cell in range. Matures after five rounds with deterministic 25% emergence.")
+		if can_act and not planning and unit.development!=null and not unit.development.has_consumed:
+			_action_button("Consume Vegetation",_consume_vegetation_auto.bind(unit.id),"Gain Food and begin the five-round transformation countdown.")
+			for corpse: CorpseState in game_state.living_migration.corpses.values():
+				if not corpse.consumed and game_state.grid.distance(unit.cell_id,corpse.cell_id)<=1: _action_button("Consume Corpse",_consume_caterpillar_corpse.bind(unit.id,corpse.id),"Gain Matter and begin transformation.")
 		if can_act and "ant" in game_state.registry.unit(unit.definition_id).tags:
 			for corpse: CorpseState in game_state.living_migration.corpses.values():
 				if not corpse.consumed and game_state.grid.distance(unit.cell_id,corpse.cell_id)<=1:
@@ -1251,6 +1394,7 @@ func _refresh_display() -> void:
 	elif selected_structure_id != -1:
 		var headquarters: GameState.Structure = game_state.structures[selected_structure_id]
 		var structure_definition:=game_state.registry.structure(headquarters.definition_id)
+		if model_preview!=null: model_preview.show_model(structure_definition.visual_id if not structure_definition.visual_id.is_empty() else headquarters.definition_id)
 		unit_label.text = "%s | Player %d\nCell %d | HP: %d/%d\nRecruit available: %s" % [
 			structure_definition.display_name,
 			headquarters.owner_id, headquarters.cell_id, headquarters.hp, headquarters.max_hp,
@@ -1285,9 +1429,11 @@ func _refresh_display() -> void:
 	elif selected_district_id!=-1 and game_state.baumeister.districts.has(selected_district_id):
 		var district: DistrictState=game_state.baumeister.districts[selected_district_id]
 		var definition:=game_state.registry.district(district.definition_id)
+		var district_status:="Building"
+		if district.completed: district_status="Operational" if district.maintenance_paid else "Unmaintained"
 		unit_label.text="%s district\nCell %d | Player %d\nConstruction: %d/%d (%s)\nProduction: %s\nUpkeep: %s" % [
 			definition.display_name,district.cell_id,district.controller_id,district.construction_progress,district.required_turns,
-			"Operational" if district.completed else "Building",_resource_record(definition.turn_production),_resource_record(definition.upkeep)]
+			district_status,_resource_record(definition.turn_production),_resource_record(definition.upkeep)]
 	elif selected_site_id!=-1 and game_state.world_sites.has(selected_site_id):
 		var site: WorldSiteState=game_state.world_sites[selected_site_id]
 		var definition:=game_state.registry.world_site(site.definition_id)
@@ -1332,12 +1478,13 @@ func _resource_text(controller_id: int=-1) -> String:
 		var summary:=rules.living_migration_rules.economic_summary(player_id)
 		lines.append("Expected production: "+_resource_record(summary.production))
 		lines.append("Current upkeep: "+_resource_record(summary.upkeep))
-		if not summary.unpaid.is_empty(): lines.append("Unpaid (no penalty yet): "+_resource_record(summary.unpaid))
+		if not summary.unpaid.is_empty(): lines.append("Unpaid upkeep; affected production inactive: "+_resource_record(summary.unpaid))
 	elif rules.baumeister_rules.is_baumeister(player_id):
 		var summary:=rules.baumeister_rules.economic_summary(player_id)
 		lines.append("Expected production: "+_resource_record(summary.production))
 		lines.append("Upkeep + maintenance: "+_resource_record(summary.upkeep))
 		if summary.unpaid_maintenance>0: lines.append("Unpaid bridge maintenance: %d Materials" % summary.unpaid_maintenance)
+		if summary.unmaintained_districts>0: lines.append("Unmaintained districts (production inactive): %d" % summary.unmaintained_districts)
 	lines.append("Active: Player %d (%s)" % [game_state.active_player,player_controllers[game_state.active_player]])
 	return "\n".join(lines)
 
@@ -1357,10 +1504,11 @@ func _refresh_resource_bar(controller_id: int=-1) -> void:
 	upkeep=summary.get("upkeep",{})
 	for resource_id: String in faction.resource_ids:
 		var definition:=game_state.registry.resource(resource_id)
-		var chip:=Label.new(); chip.name="Resource_"+resource_id
+		var chip:=Button.new(); chip.name="Resource_"+resource_id; chip.disabled=true; chip.focus_mode=Control.FOCUS_NONE; chip.add_theme_constant_override("icon_max_width",20)
 		var income:=int(production.get(resource_id,0)); var cost:=int(upkeep.get(resource_id,0))
 		chip.text="%s  %d  (%+d)" % [definition.display_name,player.resource_amount(resource_id),income-cost]
 		chip.tooltip_text=StrategicTooltip.resource(definition,player.resource_amount(resource_id),income,cost)
+		ContentIcon.apply(chip,definition)
 		chip.mouse_filter=Control.MOUSE_FILTER_STOP; resource_bar.add_child(chip)
 	var research:=player.research
 	var research_chip:=Label.new(); research_chip.name="ResearchProgress"
@@ -1389,9 +1537,11 @@ func _resource_record(values: Dictionary) -> String:
 
 func _populate_spider_panel(unit: GameState.Unit) -> void:
 	var spider:=unit.spider_state
+	var config:=rules.living_migration_rules.config_for(unit.controller_id)
+	var mite_interval:=config.improved_mite_interval if rules.research_rules.has_unlock_tag(unit.controller_id,"improved_mite_interval") else config.mite_production_interval
 	unit_label.text += "\n\nSpider internals: %d/%d slots\nNursery: %s\nMites: %d | progress %d/%d" % [
 		spider.slots.size(),spider.slot_limit,spider.nursery_branch.replace("_"," ").capitalize() if not spider.nursery_branch.is_empty() else "unselected",
-		spider.held_mites,spider.mite_progress,rules.living_migration_rules.config_for(unit.controller_id).mite_production_interval]
+		spider.held_mites,spider.mite_progress,mite_interval]
 	unit_label.text += "\nSlots: "+(", ".join(spider.slots) if not spider.slots.is_empty() else "empty")
 	var slot_cells:=PackedStringArray()
 	for slot_index in range(spider.slot_limit):
@@ -1411,8 +1561,12 @@ func _populate_spider_panel(unit: GameState.Unit) -> void:
 			if recipe.branch_id==spider.nursery_branch:
 				var outcomes:=PackedStringArray()
 				for outcome_id: String in recipe.outcome_unit_ids: outcomes.append(game_state.registry.unit(outcome_id).display_name)
-				_action_button("Produce %s — %s — %d turns" % [recipe.display_name,_resource_record(recipe.costs),recipe.development_turns],
-					_queue_recipe.bind(unit.id,recipe_id),"%s\nOutcome: %s\nNutrients: %d" % [recipe.description if not recipe.description.is_empty() else "Biological production job.",", ".join(outcomes),recipe.nutrient_requirement])
+				var development_turns:=recipe.development_turns
+				if rules.research_rules.has_unlock_tag(unit.controller_id,"nursery_improvements"): development_turns=maxi(1,development_turns-config.nursery_development_reduction)
+				var nutrients:=recipe.nutrient_requirement
+				if nutrients>0 and rules.research_rules.has_unlock_tag(unit.controller_id,"biological_maturation"): nutrients=maxi(1,nutrients-config.caterpillar_requirement_reduction)
+				_action_button("Produce %s — %s — %d turns" % [recipe.display_name,_resource_record(recipe.costs),development_turns],
+					_queue_recipe.bind(unit.id,recipe_id),"%s\nOutcome: %s\nNutrients: %d" % [recipe.description if not recipe.description.is_empty() else "Biological production job.",", ".join(outcomes),nutrients])
 	for index in range(spider.nursery_jobs.size()):
 		var job: BiologicalProductionState=spider.nursery_jobs[index]
 		var recipe_definition:=game_state.registry.biological_recipe(job.recipe_id)
@@ -1423,7 +1577,9 @@ func _populate_spider_panel(unit: GameState.Unit) -> void:
 			for outcome_id: String in job.outcome_unit_ids:
 				if rules.research_rules.is_unit_unlocked(unit.controller_id,outcome_id):
 					var outcome:=game_state.registry.unit(outcome_id)
-					var lifetime:=" (%d turns)" % outcome.temporary_lifetime_turns if outcome.temporary_lifetime_turns>0 else ""
+					var effective_lifetime:=outcome.temporary_lifetime_turns
+					if effective_lifetime>0 and rules.research_rules.has_unlock_tag(unit.controller_id,"marsh_longevity"): effective_lifetime+=config.temporary_lifetime_bonus
+					var lifetime:=" (%d turns)" % effective_lifetime if effective_lifetime>0 else ""
 					_action_button("Deploy "+outcome.display_name+lifetime,_deploy_job_auto.bind(unit.id,index,outcome_id))
 	if spider.held_mites>0: _action_button("Deploy Mite",_deploy_mite_auto.bind(unit.id))
 	if spider.construction==null:
@@ -1519,6 +1675,26 @@ func _build_internal(spider_id: int,building_id: String) -> void: _apply_ui_resu
 func _start_spider(spider_id: int) -> void: _apply_ui_result(_network_command(CommandDispatcher.START_SPIDER_CONSTRUCTION,{"spider_id":spider_id}) if network_session!=null else rules.start_spider_construction(game_state.active_player,spider_id))
 func _start_research_ui(technology_id: String) -> void: _apply_ui_result(_network_command(CommandDispatcher.START_RESEARCH,{"technology_id":technology_id}) if network_session!=null else rules.start_research(game_state.active_player,technology_id))
 func _transform_selected(unit_id: int,outcome_id: String) -> void: _apply_ui_result(_network_command(CommandDispatcher.TRANSFORM_CATERPILLAR,{"unit_id":unit_id,"outcome_id":outcome_id}) if network_session!=null else rules.transform_caterpillar(game_state.active_player,unit_id,outcome_id))
+func _submit_combat_option(unit_id: int,option_id: String) -> void: _apply_ui_result(_network_command(CommandDispatcher.COMBAT_INTENT,{"unit_id":unit_id,"option_id":option_id}) if network_session!=null else rules.submit_combat_intent(_view_controller_id(),unit_id,option_id))
+func _lay_larva_auto(unit_id: int) -> void:
+	var unit: GameState.Unit=game_state.units.get(unit_id) as GameState.Unit; var candidates: Array[int]=[]
+	if unit!=null:
+		for cell_id: int in grid.get_cells_within_distance(unit.cell_id,rules.living_migration_rules.config_for(unit.controller_id).larva_interaction_range):
+			if game_state.is_water_cell(cell_id): candidates.append(cell_id)
+	candidates.sort()
+	var result:=GameRules.Result.new(false,"No legal water cell is in range.")
+	if not candidates.is_empty(): result=_network_command(CommandDispatcher.LAY_LARVA,{"unit_id":unit_id,"cell_id":candidates[0]}) if network_session!=null else rules.lay_larva(game_state.active_player,unit_id,candidates[0])
+	_apply_ui_result(result)
+func _consume_vegetation_auto(unit_id: int) -> void:
+	var unit: GameState.Unit=game_state.units.get(unit_id) as GameState.Unit; var candidates: Array[int]=[]
+	if unit!=null:
+		for cell_id: int in grid.get_cells_within_distance(unit.cell_id,1):
+			if not game_state.is_water_cell(cell_id) and game_state.living_migration.terrain_at(cell_id).kind==TerrainConsumptionState.Kind.FRESH: candidates.append(cell_id)
+	candidates.sort()
+	var result:=GameRules.Result.new(false,"No eligible vegetation is in range.")
+	if not candidates.is_empty(): result=_network_command(CommandDispatcher.CONSUME,{"unit_id":unit_id,"source_kind":"vegetation","source_id":candidates[0]}) if network_session!=null else rules.consume(game_state.active_player,unit_id,"vegetation",candidates[0])
+	_apply_ui_result(result)
+func _consume_caterpillar_corpse(unit_id: int,corpse_id: int) -> void: _apply_ui_result(_network_command(CommandDispatcher.CONSUME,{"unit_id":unit_id,"source_kind":"corpse","source_id":corpse_id}) if network_session!=null else rules.consume(game_state.active_player,unit_id,"corpse",corpse_id))
 func _select_disease_ui(unit_id: int,disease_id: String) -> void: _apply_ui_result(_network_command(CommandDispatcher.SELECT_DISEASE,{"mite_id":unit_id,"disease_id":disease_id}) if network_session!=null else rules.select_disease(game_state.active_player,unit_id,disease_id))
 func _consume_corpse_ui(unit_id: int,corpse_id: int) -> void: _apply_ui_result(_network_command(CommandDispatcher.CONSUME_CORPSE,{"ant_id":unit_id,"corpse_id":corpse_id}) if network_session!=null else rules.try_consume_corpse(game_state.active_player,unit_id,corpse_id))
 func _build_district_ui(pillar_id: int,cell_id: int,district_id: String) -> void: _apply_ui_result(_network_command(CommandDispatcher.BUILD_DISTRICT,{"pillar_id":pillar_id,"cell_id":cell_id,"district_id":district_id}) if network_session!=null else rules.build_district(game_state.active_player,pillar_id,cell_id,district_id))
@@ -1681,12 +1857,32 @@ func _owner_color(owner_id: int) -> Color:
 	if game_state==null or not game_state.controllers.has(owner_id): return Color("#9ca3a5")
 	if game_state.controllers[owner_id].kind==ControllerState.NEUTRAL_AI:
 		return Color("#dd6f6a") if owner_id in [51,52] else Color("#d8c66a")
+	if game_state.players.has(owner_id) and game_state.players[owner_id].ownership_color.is_valid_html_color():
+		return PlayerIdentity.color_for_hex(game_state.players[owner_id].ownership_color)
 	var faction:=game_state.registry.faction(game_state.controllers[owner_id].faction_id)
 	if faction==null: return Color("#9ca3a5")
 	if faction.visual_theme_id=="blue": return Color("#75baff")
 	if faction.visual_theme_id=="living_migration": return Color("#75c96b")
 	if faction.visual_theme_id=="baumeister": return Color("#d7a94b")
 	return Color("#f77e75")
+
+func _build_start_suitability(player_ids: Array[int],faction_ids: Array[String]) -> Dictionary:
+	var result:={}
+	for index in range(player_ids.size()):
+		var values: Array[float]=[]
+		var faction_id:=faction_ids[index] if index<faction_ids.size() else ""
+		for cell: PlanetWorldCellData in generated_planet.cell_world_data:
+			var neighbor_quality:=0.0
+			for neighbor_id: int in grid.get_neighbors(cell.cell_id):
+				var neighbor:=generated_planet.get_cell(neighbor_id)
+				neighbor_quality+=neighbor.fertility+(1.0-neighbor.terrain_roughness)
+			neighbor_quality/=maxf(1.0,float(grid.get_neighbors(cell.cell_id).size())*2.0)
+			var score:=0.35*cell.fertility+0.25*(1.0-cell.terrain_roughness)+0.20*neighbor_quality
+			if faction_id=="living_migration": score+=0.20*(cell.fertility*0.6+cell.effective_moisture*0.4)
+			elif faction_id=="baumeister": score+=0.20*(1.0-cell.terrain_roughness)
+			values.append(clampf(score,0.0,1.0))
+		result[player_ids[index]]=values
+	return result
 
 func _duplicate_and_tint_material(material: Material, color: Color) -> Material:
 	if material == null:
@@ -1701,6 +1897,22 @@ func _duplicate_and_tint_material(material: Material, color: Color) -> Material:
 				if uniform.name in ["albedo_color", "team_accent"]:
 					shader_material.set_shader_parameter(uniform.name, color)
 	return duplicate
+
+func _player_overview_text() -> String:
+	if game_state==null: return ""
+	var lines:=PackedStringArray(["PLAYERS"])
+	var ids: Array[int]=[]; ids.assign(game_state.players.keys()); ids.sort()
+	for player_id: int in ids:
+		var player: PlayerState=game_state.players[player_id]
+		var faction:=game_state.registry.faction(player.faction_id)
+		var slot:=game_state.turn_state.order.find(player_id)
+		var markers:=PackedStringArray()
+		if game_state.active_player==player_id and not game_state.turn_state.neutral_phase and game_state.winner_id==0: markers.append("ACTIVE")
+		markers.append("ELIMINATED" if player.eliminated else "ALIVE")
+		if not player.connected: markers.append("DISCONNECTED")
+		lines.append("P%d %s · %s · %s · %s" % [player_id,player.player_name,
+			PlayerIdentity.color_name_for_slot(slot),faction.display_name if faction!=null else player.faction_id," / ".join(markers)])
+	return "\n".join(lines)
 
 func _apply_team_accent(root: Node, owner_id: int) -> void:
 	if root is MeshInstance3D:
@@ -1739,6 +1951,8 @@ func _begin_recruit(kind: String, hq_id: int) -> void:
 
 func _queue_ai_turn() -> void:
 	if _ai_running or game_state.winner_id != 0: return
+	if game_state.turn_state.phase==TurnState.COMBAT_PLANNING:
+		_ai_running=true; _submit_ai_combat.call_deferred(_ai_token); return
 	if game_state.turn_state.neutral_phase:
 		_ai_running=true
 		_start_neutral_phase.call_deferred(_ai_token)
@@ -1747,6 +1961,21 @@ func _queue_ai_turn() -> void:
 		return
 	_ai_running = true
 	_start_ai_turn.call_deferred(_ai_token, game_state.active_player)
+
+func _submit_ai_combat(token: int) -> void:
+	for actor: int in game_state.alive_player_ids():
+		if token!=_ai_token or game_state.turn_state.phase!=TurnState.COMBAT_PLANNING: break
+		if player_controllers.get(actor,"")!="AI" or game_state.combat_planning.is_locked(actor): continue
+		for unit_id: int in rules.combat_planning_rules.eligible_unit_ids(actor):
+			var targets:=rules.combat_planning_rules.attack_targets(actor,unit_id)
+			var option:="attack" if not targets.is_empty() else ("counter" if game_state.units[unit_id].counter_cooldown_remaining==0 else "dodge")
+			var params:={"unit_id":unit_id,"option_id":option}
+			if option=="attack": params.target_id=targets[0]
+			if network_session!=null: _network_authoritative_command(actor,CommandDispatcher.COMBAT_INTENT,params)
+			else: rules.submit_combat_intent(actor,unit_id,option,int(params.get("target_id",-1)))
+		if network_session!=null: _network_authoritative_command(actor,CommandDispatcher.LOCK_COMBAT,{})
+		else: rules.lock_combat(actor)
+	_ai_running=false; _refresh_display()
 
 func _start_ai_turn(token: int, actor: int) -> void:
 	var budget: int = maxi(8, game_state.units.size() * 3)
@@ -1843,7 +2072,8 @@ func _human_action_blocked() -> bool:
 	if privacy_overlay!=null and privacy_overlay.visible: return true
 	if network_session!=null and network_session.status!=NetworkSession.Status.ACTIVE:
 		_feedback("Waiting for all network players to finish loading."); return true
-	if game_state.turn_state.neutral_phase or player_controllers.get(game_state.active_player,"") != "Human":
+	var controller:=_view_controller_id() if game_state.turn_state.phase==TurnState.COMBAT_PLANNING else game_state.active_player
+	if game_state.turn_state.neutral_phase or player_controllers.get(controller,"") != "Human":
 		return true
 	if is_presenting():
 		_feedback("Wait for movement to finish.")

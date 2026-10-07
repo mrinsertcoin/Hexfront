@@ -8,6 +8,7 @@ class Result extends RuleResult:
 var state: GameState
 var movement_rules: MovementRules
 var combat_rules: CombatRules
+var combat_planning_rules: CombatPlanningRules
 var research_rules: ResearchRules
 var recruitment_rules: RecruitmentRules
 var site_rules: SiteRules
@@ -18,6 +19,7 @@ func _init(game_state: GameState) -> void:
 	state=game_state
 	movement_rules=MovementRules.new(state)
 	combat_rules=CombatRules.new(state)
+	combat_planning_rules=CombatPlanningRules.new(state)
 	research_rules=ResearchRules.new(state)
 	living_migration_rules=LivingMigrationRules.new(state,research_rules)
 	movement_rules.capability_rules=living_migration_rules
@@ -44,17 +46,29 @@ func path_to(actor: int,unit_id: int,destination: int) -> Array[int]:
 
 func try_move(actor: int,unit_id: int,destination: int) -> Result:
 	var result:=movement_rules.try_move(actor,unit_id,destination)
-	if result.success: result.reason+=living_migration_rules.after_move(unit_id)
+	if result.success: result.reason+=living_migration_rules.after_move(unit_id,result.path)
 	return _commit(result)
 
 func preview_attack(actor: int,attacker_id: int,target_id: int) -> Result:
 	return _wrap(combat_rules.preview_attack(actor,attacker_id,target_id))
 
 func attack_targets(actor: int,attacker_id: int) -> Array[int]:
+	if state.turn_state.phase==TurnState.COMBAT_PLANNING: return combat_planning_rules.attack_targets(actor,attacker_id)
 	return combat_rules.attack_targets(actor,attacker_id)
 
 func try_attack(actor: int,attacker_id: int,target_id: int) -> Result:
-	return _commit(combat_rules.try_attack(actor,attacker_id,target_id))
+	if state.turn_state.neutral_phase or not state.turn_state.combat_planning_enabled: return _commit(combat_rules.try_attack(actor,attacker_id,target_id))
+	return submit_combat_intent(actor,attacker_id,"attack",target_id)
+
+func submit_combat_intent(actor: int,unit_id: int,option_id: String,target_id: int=-1) -> Result:
+	return _commit(combat_planning_rules.submit_intent(actor,unit_id,option_id,target_id))
+
+func lock_combat(actor: int) -> Result:
+	var before_round:=state.round_number
+	var result:=combat_planning_rules.lock_player(actor)
+	if result.success and state.round_number>before_round:
+		state.process_round_boundary(); living_migration_rules.process_round_start()
+	return _commit(result)
 
 func recruit_error(actor: int,headquarters_id: int,unit_id: String) -> String:
 	return recruitment_rules.recruit_error(actor,headquarters_id,unit_id)
@@ -94,13 +108,16 @@ func try_end_turn(actor: int) -> Result:
 	living_migration_rules.end_turn(actor)
 	baumeister_rules.end_turn(actor)
 	state.advance_turn()
-	living_migration_rules.start_turn(state.active_player)
-	baumeister_rules.start_turn(state.active_player)
+	if state.turn_state.phase==TurnState.COMBAT_PLANNING:
+		state.combat_planning.reset()
+		return Result.new(true,"Simultaneous combat planning.")
+	living_migration_rules.start_turn(state.active_player); baumeister_rules.start_turn(state.active_player)
 	return Result.new(true,"Player %d's turn." % state.active_player)
 
 func finish_neutral_phase() -> Result:
 	if not state.turn_state.neutral_phase: return Result.new(false,"Neutral activity is not in progress.")
 	state.advance_turn()
+	living_migration_rules.process_round_start()
 	living_migration_rules.start_turn(state.active_player)
 	baumeister_rules.start_turn(state.active_player)
 	return Result.new(true,"Player %d's turn." % state.active_player)
@@ -124,6 +141,8 @@ func start_internal_construction(actor: int,spider_id: int,building_id: String) 
 func queue_biological_production(actor: int,spider_id: int,recipe_id: String) -> Result: return _commit(living_migration_rules.queue_biological_production(actor,spider_id,recipe_id))
 func deploy_biological(actor: int,spider_id: int,job_index: int,outcome_id: String,cell_id: int) -> Result: return _commit(living_migration_rules.deploy_biological(actor,spider_id,job_index,outcome_id,cell_id))
 func transform_caterpillar(actor: int,unit_id: int,outcome_id: String) -> Result: return _commit(living_migration_rules.transform_caterpillar(actor,unit_id,outcome_id))
+func lay_larva(actor: int,unit_id: int,cell_id: int) -> Result: return _commit(living_migration_rules.lay_larva(actor,unit_id,cell_id))
+func consume(actor: int,unit_id: int,source_kind: String,source_id: int) -> Result: return _commit(living_migration_rules.consume(actor,unit_id,source_kind,source_id))
 func start_spider_construction(actor: int,spider_id: int) -> Result: return _commit(living_migration_rules.start_spider_construction(actor,spider_id))
 func deploy_spider(actor: int,spider_id: int,cell_id: int) -> Result: return _commit(living_migration_rules.deploy_spider(actor,spider_id,cell_id))
 func deploy_mite(actor: int,spider_id: int,cell_id: int) -> Result: return _commit(living_migration_rules.deploy_mite(actor,spider_id,cell_id))

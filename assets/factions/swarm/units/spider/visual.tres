@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ModelVisualDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/view/model_visual_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "living_spider"
+model_path = "res://assets/factions/swarm/units/spider/source/spider.glb"
+model_scale = Vector3(0.72, 0.72, 0.72)
+rotation_offset_degrees = Vector3(0, 180, 0)
+notes = "Living Spider headquarters; imported skin and armature are preserved."

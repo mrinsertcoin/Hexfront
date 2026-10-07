@@ -46,7 +46,7 @@ func _lobby_changed(_records: Array) -> void:
 		for record: Dictionary in session.lobby_records(): config.player_assignments.append({"player_id":record.player_id,"player_name":record.player_name,"faction_id":record.faction_id,"team_id":record.player_id,"controller_kind":ControllerState.HUMAN})
 		var error:=session.announce_match(config.public_network_dictionary())
 		if not error.is_empty(): return _finish(false,error)
-		state=GameState.new(PlanetGrid.new(3,12.0),{"faction_ids":config.faction_ids(),"controller_kinds":config.controller_kinds(),"team_ids":config.team_ids()})
+		state=GameState.new(PlanetGrid.new(3,12.0),{"faction_ids":config.faction_ids(),"controller_kinds":config.controller_kinds(),"team_ids":config.team_ids(),"simultaneous_combat":false})
 		session.attach_authority(state,GameRules.new(state))
 
 func _match_announced(_config: Dictionary) -> void: pass

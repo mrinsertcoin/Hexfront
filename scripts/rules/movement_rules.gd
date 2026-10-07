@@ -24,15 +24,23 @@ func parents(unit: GameState.Unit) -> Dictionary[int,int]:
 	var team_id:=state.visibility_system.team_id_for_controller(unit.controller_id)
 	var controller: ControllerState=state.controllers.get(unit.controller_id) as ControllerState
 	var uses_player_observation:=controller==null or controller.kind!=ControllerState.NEUTRAL_AI
-	for cell: PlanetCell in state.grid.cells:
-		var occupant:=state.entity_at(cell.id)
-		if occupant!=null and occupant.id!=unit.id:
-			var allied:=state.players.has(occupant.controller_id) and state.visibility_system.team_id_for_controller(occupant.controller_id)==team_id
-			if not uses_player_observation or allied or state.visibility_system.can_observe_entity(team_id,occupant.id): blocked[cell.id]=true
-		var site:=state.site_at(cell.id)
-		if site!=null and state.registry.world_site(site.definition_id).blocks_movement \
-				and (not uses_player_observation or state.visibility_system.has_discovered_site(team_id,site.id)): blocked[cell.id]=true
-	if capability_rules!=null and "road_bound" in state.registry.unit(unit.definition_id).tags:
+	# Build occupancy from entities rather than scanning every planet cell and
+	# performing linear entity lookups. This keeps movement proportional to the
+	# match population on Medium and Large worlds.
+	var occupants: Array[RefCounted]=[]
+	occupants.append_array(state.units.values()); occupants.append_array(state.structures.values())
+	for occupant: RefCounted in occupants:
+		if occupant.id==unit.id: continue
+		var allied:=state.players.has(occupant.controller_id) and state.visibility_system.team_id_for_controller(occupant.controller_id)==team_id
+		if not uses_player_observation or allied or state.visibility_system.can_observe_entity(team_id,occupant.id): blocked[occupant.cell_id]=true
+	for site: WorldSiteState in state.world_sites.values():
+		var definition:=state.registry.world_site(site.definition_id)
+		if definition!=null and definition.blocks_movement \
+				and (not uses_player_observation or state.visibility_system.has_discovered_site(team_id,site.id)): blocked[site.cell_id]=true
+	var movement_tags:=state.registry.unit(unit.definition_id).tags
+	# Workers physically create the network while moving; other road-bound ants
+	# still require an already active Connection route.
+	if capability_rules!=null and "road_bound" in movement_tags and "road_builder" not in movement_tags:
 		var active:=capability_rules.active_road_cells(unit.controller_id)
 		for cell: PlanetCell in state.grid.cells:
 			if cell.id not in active: blocked[cell.id]=true

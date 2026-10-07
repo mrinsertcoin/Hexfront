@@ -27,6 +27,15 @@ disconnection_limit = 2
 research_per_building = 1
 food_per_food_building = 2
 synapse_per_synapse_building = 1
+improved_harvest_bonus = 1
+improved_regrowth_reduction = 1
+nursery_development_reduction = 1
+caterpillar_nutrient_bonus = 1
+caterpillar_requirement_reduction = 1
+temporary_lifetime_bonus = 1
+improved_connection_range_bonus = 1
+improved_road_segments_bonus = 1
+improved_synapse_building_bonus = 1
 starting_nursery_branch = "ant_hill"
 
 [resource]
@@ -39,7 +48,7 @@ unit_roster_ids = PackedStringArray("living_spider", "mite", "worker_ant", "figh
 starting_resources = {"food": 20, "silk": 8, "synapse": 5}
 turn_resource_income = {}
 starting_unit_ids = PackedStringArray("living_spider", "worker_ant", "mite")
-technology_ids = PackedStringArray("lm_symbiotic_foundations", "lm_ant_adaptation", "lm_marsh_metabolism", "lm_metamorphosis", "lm_virulence", "lm_migration_efficiency")
+technology_ids = PackedStringArray("lm_symbiotic_foundations", "lm_ant_adaptation", "lm_queen_signal", "lm_migration_networks", "lm_marsh_metabolism", "lm_marsh_longevity", "lm_metamorphosis", "lm_apex_metamorphosis", "lm_virulence", "lm_migration_efficiency", "lm_regenerative_clearings", "lm_synaptic_bloom")
 visual_theme_id = "living_migration"
 music_id = "swarm"
 gameplay_config = SubResource("LivingMigrationConfig_main")

@@ -5,6 +5,7 @@ script = ExtResource("1")
 id = "civic_monument"
 display_name = "Civic Monument"
 costs = {"materials": 4}
+upkeep = {"food": 1}
 turn_production = {"unity": 2}
 construction_turns = 2
 tags = PackedStringArray("production", "unity_production", "research")

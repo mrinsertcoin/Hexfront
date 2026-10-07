@@ -10,6 +10,7 @@ class Unit extends RefCounted:
 	var moved: bool=false
 	var attacked: bool=false
 	var ready_next_turn: bool=false
+	var upkeep_paid: bool=true
 	var hp: int
 	var spider_state: SpiderState
 	var development: BiologicalProductionState
@@ -21,6 +22,7 @@ class Unit extends RefCounted:
 	var disease_immunities: Dictionary[String,int]={}
 	var deployed: bool=false
 	var designation: DesignationState
+	var counter_cooldown_remaining: int=0
 	var revealed_to_teams: Dictionary[int,int]={}
 	var neutral_group_id: String=""
 	var neutral_group_instance_id: int=-1
@@ -100,6 +102,7 @@ var players: Dictionary[int,PlayerState]={}
 var controllers: Dictionary[int,ControllerState]={}
 var relationships:=RelationshipState.new()
 var living_migration:=LivingMigrationState.new()
+var combat_planning:=CombatPlanningState.new()
 var baumeister:=BaumeisterState.new()
 var turn_state:=TurnState.new()
 var next_id: int=200
@@ -111,6 +114,11 @@ var registry: ContentRegistry
 var setup: Dictionary
 var population_fingerprint: String=""
 var visibility_system: VisibilitySystem
+var starting_cells: Dictionary[int,int]={}
+var start_diagnostics: Dictionary[int,Dictionary]={}
+var public_events: Array[Dictionary]=[]
+var match_started_msec: int=0
+var water_cells: Dictionary[int,bool]={}
 
 var active_player: int:
 	get: return turn_state.active_controller_id
@@ -136,9 +144,13 @@ func _init(topology: PlanetGrid=null,match_setup: Dictionary={},content: Content
 func reset_match() -> void:
 	units.clear(); structures.clear(); world_sites.clear(); players.clear(); controllers.clear()
 	living_migration=LivingMigrationState.new()
+	combat_planning=CombatPlanningState.new()
 	baumeister=BaumeisterState.new()
 	next_id=200; next_site_id=10000; winner_id=0; last_started_turn=-1
-	population_fingerprint=""
+	population_fingerprint=""; starting_cells.clear(); start_diagnostics.clear(); public_events.clear()
+	match_started_msec=Time.get_ticks_msec()
+	water_cells.clear()
+	for value: Variant in setup.get("water_cells",[]): water_cells[int(value)]=true
 	visibility_system.reset()
 	var faction_ids: Array[String]=[]
 	faction_ids.assign(setup.get("faction_ids",["blue","red"]))
@@ -146,19 +158,27 @@ func reset_match() -> void:
 	controller_kinds.assign(setup.get("controller_kinds",[ControllerState.HUMAN,ControllerState.PLAYER_AI]))
 	var team_ids: Array[int]=[]
 	team_ids.assign(setup.get("team_ids",[]))
+	var player_ids: Array[int]=[]
+	player_ids.assign(setup.get("player_ids",[]))
+	var player_names: Array[String]=[]
+	player_names.assign(setup.get("player_names",[]))
+	var player_colors: Array[String]=[]
+	player_colors.assign(setup.get("player_colors",[]))
 	controllers[0]=ControllerState.new(0,ControllerState.WORLD,"")
 	for index in range(faction_ids.size()):
-		var controller_id:=index+1
+		var controller_id:=player_ids[index] if index<player_ids.size() else index+1
 		var kind:=controller_kinds[index] if index<controller_kinds.size() else ControllerState.PLAYER_AI
 		var team_id:=team_ids[index] if index<team_ids.size() else controller_id
 		controllers[controller_id]=ControllerState.new(controller_id,kind,faction_ids[index],team_id)
-		players[controller_id]=PlayerState.new(controller_id,controller_id,faction_ids[index])
+		var player_name:=player_names[index] if index<player_names.size() else "Player %d" % controller_id
+		var player_color:=player_colors[index] if index<player_colors.size() else ""
+		players[controller_id]=PlayerState.new(controller_id,controller_id,faction_ids[index],player_name,player_color)
 		var faction:=registry.faction(faction_ids[index])
 		assert(faction!=null,"Unknown faction: "+faction_ids[index])
 		players[controller_id].resources=faction.starting_resources.duplicate(true)
 	var order: Array[int]=[]
 	for player_id: int in players: order.append(player_id)
-	order.sort(); turn_state.reset(order)
+	order.sort(); turn_state.combat_planning_enabled=bool(setup.get("simultaneous_combat",true)); turn_state.reset(order)
 	relationships=RelationshipState.new()
 	for a: int in order:
 		for b: int in order:
@@ -171,11 +191,12 @@ func reset_match() -> void:
 	refresh_visibility()
 
 func _spawn_starting_content(order: Array[int]) -> void:
-	var homes:=_starting_homes(order.size())
+	var homes:=_starting_homes(order)
 	for player_index in range(order.size()):
 		var controller_id:=order[player_index]
 		var faction:=registry.faction(players[controller_id].faction_id)
 		var home:=homes[player_index] if player_index<homes.size() else grid.breadth_first(homes.back()).order[-1]
+		starting_cells[controller_id]=home
 		var neighbors:=grid.get_neighbors(home)
 		var legacy_ids: Array[int]=[]
 		if controller_id==1: legacy_ids.assign([1,2,5])
@@ -211,25 +232,40 @@ func _initialize_faction_state(order: Array[int]) -> void:
 					structure.pillar_state=PillarState.new(config.pillar_max_integrity,true)
 					baumeister.origin_pillars[controller_id]=structure.id
 
-func _starting_homes(count: int) -> Array[int]:
+func _starting_homes(order: Array[int]) -> Array[int]:
 	var homes: Array[int]=[]
-	if count<=0 or grid.cells.is_empty(): return homes
-	# Preserve the prototype anchors exactly, then spread additional factions by
-	# maximizing their minimum graph distance from every already selected home.
-	homes.append(0)
-	if count>1: homes.append(grid.breadth_first(0).order[-1])
-	while homes.size()<count:
+	if order.is_empty() or grid.cells.is_empty(): return homes
+	var suitability: Dictionary=setup.get("start_suitability",{})
+	# Offline prototype states keep their historical anchors. Generated matches
+	# provide faction-aware suitability arrays and use graph-distance maximin.
+	if suitability.is_empty():
+		homes.append(0)
+		if order.size()>1: homes.append(grid.breadth_first(0).order[-1])
+	var start_seed:=int(setup.get("start_seed",0))
+	while homes.size()<order.size():
+		var player_id:=order[homes.size()]
 		var best_cell:=-1
-		var best_distance:=-1
+		var best_score:=-INF
 		for cell: PlanetCell in grid.cells:
 			if cell.id in homes: continue
-			var minimum:=2147483647
-			for home: int in homes: minimum=mini(minimum,grid.distance(cell.id,home))
-			if minimum>best_distance:
-				best_distance=minimum; best_cell=cell.id
+			var minimum:=grid.get_cell_count() if homes.is_empty() else 2147483647
+			# Keep the selected home as the traversal origin so PlanetGrid's bounded
+			# distance cache performs one BFS per home instead of one per candidate.
+			for home: int in homes: minimum=mini(minimum,grid.distance(home,cell.id))
+			var local_score:=_start_suitability_value(suitability,player_id,cell.id)
+			var tie_break:=float(posmod(cell.id*1103515245+start_seed,104729))/104729000.0
+			var score:=float(minimum)*100.0+local_score*10.0+tie_break
+			if score>best_score:
+				best_score=score; best_cell=cell.id
 		if best_cell<0: break
 		homes.append(best_cell)
 	return homes
+
+func _start_suitability_value(values: Dictionary,player_id: int,cell_id: int) -> float:
+	var row: Variant=values.get(player_id,values.get(str(player_id),[]))
+	if row is Array and cell_id<(row as Array).size(): return float((row as Array)[cell_id])
+	if row is PackedFloat32Array and cell_id<(row as PackedFloat32Array).size(): return float((row as PackedFloat32Array)[cell_id])
+	return 0.0
 
 func player_for_controller(controller_id: int) -> PlayerState:
 	return players.get(controller_id)
@@ -264,6 +300,8 @@ func is_cell_blocked(cell_id: int,ignore_entity_id: int=-1) -> bool:
 		var definition:=registry.world_site(site.definition_id)
 		return definition!=null and definition.blocks_movement
 	return false
+
+func is_water_cell(cell_id: int) -> bool: return bool(water_cells.get(cell_id,false))
 
 func allocate_id() -> int:
 	while units.has(next_id) or structures.has(next_id): next_id+=1
@@ -345,6 +383,7 @@ func apply_population(result: WorldPopulationResult) -> void:
 			units[entity_id]=unit
 		group_instance+=1
 	turn_state.neutral_phase_enabled=not result.neutral_group_records.is_empty()
+	_calculate_start_diagnostics()
 	refresh_visibility()
 
 func clear_population() -> void:
@@ -361,8 +400,86 @@ func clear_population() -> void:
 	turn_state.neutral_phase_enabled=false; turn_state.neutral_phase=false
 	refresh_visibility()
 
+func is_player_alive(controller_id: int) -> bool:
+	return players.has(controller_id) and not players[controller_id].eliminated
+
+func alive_player_ids() -> Array[int]:
+	var result: Array[int]=[]
+	for controller_id: int in players:
+		if is_player_alive(controller_id): result.append(controller_id)
+	result.sort(); return result
+
+func has_survival_anchor(controller_id: int) -> bool:
+	for unit: Unit in units.values():
+		var definition:=registry.unit(unit.definition_id)
+		if unit.controller_id==controller_id and unit.hp>0 and definition!=null and "headquarters" in definition.tags: return true
+	for structure: Structure in structures.values():
+		var definition:=registry.structure(structure.definition_id)
+		if structure.controller_id==controller_id and structure.hp>0 and definition!=null and "headquarters" in definition.tags: return true
+	return false
+
+func evaluate_player_survival(controller_id: int,reason: String="Headquarters lost") -> bool:
+	if not players.has(controller_id) or players[controller_id].eliminated or has_survival_anchor(controller_id): return false
+	eliminate_player(controller_id,reason)
+	return true
+
+func eliminate_player(controller_id: int,reason: String="Eliminated") -> void:
+	if not players.has(controller_id) or players[controller_id].eliminated: return
+	var player: PlayerState=players[controller_id]
+	player.eliminated=true; player.elimination_round=round_number; turn_state.set_eliminated(controller_id)
+	var removed_units: Array[int]=[]
+	for unit: Unit in units.values():
+		if unit.controller_id==controller_id: removed_units.append(unit.id)
+	for unit_id: int in removed_units: remove_unit(unit_id,false)
+	var removed_structures: Array[int]=[]
+	for structure: Structure in structures.values():
+		if structure.controller_id==controller_id: removed_structures.append(structure.id)
+	for structure_id: int in removed_structures: remove_structure(structure_id)
+	living_migration.roads.erase(controller_id)
+	baumeister.origin_pillars.erase(controller_id)
+	for district_id: int in baumeister.districts.keys():
+		if baumeister.districts[district_id].controller_id==controller_id: baumeister.districts.erase(district_id)
+	for bridge_id: int in baumeister.bridges.keys():
+		if baumeister.bridges[bridge_id].controller_id==controller_id: baumeister.bridges.erase(bridge_id)
+	add_public_event("player_eliminated",{"player_id":controller_id,"player_name":player.player_name,"reason":reason})
+	var alive:=alive_player_ids()
+	if alive.size()==1 and players.size()>=NetworkProtocol.MIN_PLAYERS:
+		winner_id=alive[0]; turn_state.neutral_phase=false
+		add_public_event("match_won",{"player_id":winner_id,"player_name":players[winner_id].player_name,
+			"faction_id":players[winner_id].faction_id,"round":round_number,"duration_seconds":match_duration_seconds()})
+	elif active_player==controller_id:
+		advance_turn()
+	refresh_visibility()
+
+func set_player_connected(controller_id: int,value: bool) -> void:
+	if players.has(controller_id): players[controller_id].connected=value
+
+func add_public_event(event_type: String,data: Dictionary={}) -> void:
+	var event:=data.duplicate(true); event.type=event_type; event.round=round_number; event.serial=turn_state.serial
+	public_events.append(event)
+	if public_events.size()>32: public_events.pop_front()
+
+func match_duration_seconds() -> int:
+	return maxi(0,int((Time.get_ticks_msec()-match_started_msec)/1000))
+
+func _calculate_start_diagnostics() -> void:
+	start_diagnostics.clear()
+	for player_id: int in starting_cells:
+		var start_cell: int=starting_cells[player_id]
+		var nearest:=2147483647
+		for opponent_id: int in starting_cells:
+			if opponent_id!=player_id: nearest=mini(nearest,grid.distance(start_cell,starting_cells[opponent_id]))
+		var nearby_sites:=0; var hostile_strength:=0
+		for site: WorldSiteState in world_sites.values(): nearby_sites+=int(grid.distance(start_cell,site.cell_id)<=4)
+		for unit: Unit in units.values():
+			if controllers.has(unit.controller_id) and controllers[unit.controller_id].kind==ControllerState.NEUTRAL_AI and relationships.is_hostile(player_id,unit.controller_id) and grid.distance(start_cell,unit.cell_id)<=5:
+				hostile_strength+=maxi(1,unit.attack_damage)
+		var suitability:=_start_suitability_value(setup.get("start_suitability",{}),player_id,start_cell)
+		start_diagnostics[player_id]={"start_cell":start_cell,"nearest_opponent_distance":nearest,
+			"local_terrain_suitability":suitability,"nearby_site_count":nearby_sites,"nearby_hostile_neutral_strength":hostile_strength}
+
 func start_turn() -> void:
-	if winner_id!=0 or last_started_turn==turn_state.serial: return
+	if winner_id!=0 or turn_state.phase!=TurnState.MANAGEMENT or last_started_turn==turn_state.serial: return
 	last_started_turn=turn_state.serial
 	var controller_id:=active_player
 	if players.has(controller_id):
@@ -379,13 +496,16 @@ func start_turn() -> void:
 
 func advance_turn() -> int:
 	turn_state.advance()
+	process_round_boundary()
+	start_turn()
+	refresh_visibility()
+	return active_player
+
+func process_round_boundary() -> void:
 	if turn_state.index==0 and living_migration.last_regrowth_round<turn_state.round_number:
 		living_migration.last_regrowth_round=turn_state.round_number
 		for terrain_state: TerrainConsumptionState in living_migration.terrain.values(): terrain_state.advance()
 		_process_world_site_regeneration()
-	start_turn()
-	refresh_visibility()
-	return active_player
 
 func refresh_visibility() -> void:
 	if visibility_system!=null and grid!=null: visibility_system.recalculate_all()
@@ -402,22 +522,27 @@ func _process_world_site_regeneration() -> void:
 
 func _process_unit_economy_and_status(controller_id: int,player: PlayerState) -> void:
 	var production: Dictionary[String,int]={}
-	var upkeep: Dictionary[String,int]={}
+	var structure_upkeep: Dictionary[String,int]={}
 	var expired: Array[int]=[]
+	var owned_units: Array[Unit]=[]
 	for unit: Unit in units.values():
 		if unit.controller_id!=controller_id: continue
+		owned_units.append(unit)
+	owned_units.sort_custom(func(a: Unit,b: Unit)->bool: return a.id<b.id)
+	for unit: Unit in owned_units:
 		var definition:=registry.unit(unit.definition_id)
-		for resource_id: String in definition.turn_production:
-			production[resource_id]=production.get(resource_id,0)+definition.turn_production[resource_id]
-		for resource_id: String in definition.upkeep:
-			upkeep[resource_id]=upkeep.get(resource_id,0)+definition.upkeep[resource_id]
-		if unit.spider_state!=null:
+		if unit.upkeep_paid:
+			for resource_id: String in definition.turn_production:
+				production[resource_id]=production.get(resource_id,0)+definition.turn_production[resource_id]
+		if unit.spider_state!=null and unit.upkeep_paid:
 			var faction:=registry.faction(player.faction_id)
 			if faction.gameplay_config is LivingMigrationConfig:
 				var config:=faction.gameplay_config as LivingMigrationConfig
 				production["food"]=production.get("food",0)+config.spider_food_production+unit.spider_state.building_count("food_production")*config.food_per_food_building
 				production["silk"]=production.get("silk",0)+config.spider_silk_production
-				production["synapse"]=production.get("synapse",0)+unit.spider_state.building_count("synapse_production")*config.synapse_per_synapse_building
+				var synapse_per:=config.synapse_per_synapse_building
+				if _has_unlock_tag(player,"synapse_improvement"): synapse_per+=config.improved_synapse_building_bonus
+				production["synapse"]=production.get("synapse",0)+unit.spider_state.building_count("synapse_production")*synapse_per
 		if unit.remaining_lifetime_turns>0 and not unit.ready_next_turn:
 			unit.remaining_lifetime_turns-=1
 			if unit.remaining_lifetime_turns==0: expired.append(unit.id)
@@ -428,22 +553,47 @@ func _process_unit_economy_and_status(controller_id: int,player: PlayerState) ->
 		for resource_id: String in structure_definition.turn_production:
 			production[resource_id]=production.get(resource_id,0)+structure_definition.turn_production[resource_id]
 		for resource_id: String in structure_definition.upkeep:
-			upkeep[resource_id]=upkeep.get(resource_id,0)+structure_definition.upkeep[resource_id]
+			structure_upkeep[resource_id]=structure_upkeep.get(resource_id,0)+structure_definition.upkeep[resource_id]
 	for district: DistrictState in baumeister.districts.values():
 		if district.controller_id!=controller_id or not district.completed: continue
 		var district_definition:=registry.district(district.definition_id)
-		for resource_id: String in district_definition.turn_production:
-			production[resource_id]=production.get(resource_id,0)+district_definition.turn_production[resource_id]
-		for resource_id: String in district_definition.upkeep:
-			upkeep[resource_id]=upkeep.get(resource_id,0)+district_definition.upkeep[resource_id]
+		if district.maintenance_paid:
+			var district_bonus:=0
+			if _has_unlock_tag(player,"district_specialization") and not district_definition.turn_production.is_empty():
+				var faction:=registry.faction(player.faction_id)
+				if faction.gameplay_config is BaumeisterConfig: district_bonus=(faction.gameplay_config as BaumeisterConfig).district_production_bonus
+			for resource_id: String in district_definition.turn_production:
+				production[resource_id]=production.get(resource_id,0)+district_definition.turn_production[resource_id]+district_bonus
 	player.add_resources(production)
 	var unpaid: Dictionary[String,int]={}
-	for resource_id: String in upkeep:
-		var paid:=mini(player.resource_amount(resource_id),upkeep[resource_id])
+	for resource_id: String in structure_upkeep:
+		var paid:=mini(player.resource_amount(resource_id),structure_upkeep[resource_id])
 		player.resources[resource_id]=player.resource_amount(resource_id)-paid
-		if paid<upkeep[resource_id]: unpaid[resource_id]=upkeep[resource_id]-paid
+		if paid<structure_upkeep[resource_id]: unpaid[resource_id]=unpaid.get(resource_id,0)+structure_upkeep[resource_id]-paid
+	for unit: Unit in owned_units:
+		var unit_upkeep:=registry.unit(unit.definition_id).upkeep
+		unit.upkeep_paid=player.can_afford(unit_upkeep)
+		if unit.upkeep_paid: player.apply_cost(unit_upkeep)
+		else:
+			for resource_id: String in unit_upkeep: unpaid[resource_id]=unpaid.get(resource_id,0)+unit_upkeep[resource_id]
+	var owned_districts: Array[DistrictState]=[]
+	for district: DistrictState in baumeister.districts.values():
+		if district.controller_id==controller_id and district.completed: owned_districts.append(district)
+	owned_districts.sort_custom(func(a: DistrictState,b: DistrictState)->bool: return a.id<b.id)
+	for district: DistrictState in owned_districts:
+		var district_upkeep:=registry.district(district.definition_id).upkeep
+		district.maintenance_paid=player.can_afford(district_upkeep)
+		if district.maintenance_paid: player.apply_cost(district_upkeep)
+		else:
+			for resource_id: String in district_upkeep: unpaid[resource_id]=unpaid.get(resource_id,0)+district_upkeep[resource_id]
 	living_migration.unpaid_upkeep[controller_id]=unpaid
 	for unit_id: int in expired: remove_unit(unit_id,true)
+
+func _has_unlock_tag(player: PlayerState,tag: String) -> bool:
+	for technology_id: String in player.research.completed_ids:
+		var technology:=registry.technology(technology_id)
+		if technology!=null and tag in technology.unlock_tags: return true
+	return false
 
 func _process_designations(controller_id: int) -> void:
 	for unit: Unit in units.values():

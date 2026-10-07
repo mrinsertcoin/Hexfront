@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ModelVisualDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/view/model_visual_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fire_ant_unarmed_variant"
+model_path = "res://assets/factions/swarm/units/fire_ant/source/fire_ant.glb"
+model_scale = Vector3(0.4, 0.4, 0.4)
+rotation_offset_degrees = Vector3(0, 180, 0)
+height_offset = 0.22
+notes = "Additional unarmed Fire Ant variant; registered but not assigned to a gameplay unit."

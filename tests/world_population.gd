@@ -44,7 +44,7 @@ func test_catalog_and_generation() -> void:
 	check(changed.fingerprint!=standard.result.fingerprint,"Population config participates in fingerprint")
 
 func test_site_rules() -> void:
-	var state:=GameState.new(PlanetGrid.new(1),{"faction_ids":["living_migration","baumeister"],"controller_kinds":[ControllerState.HUMAN,ControllerState.HUMAN]})
+	var state:=GameState.new(PlanetGrid.new(1),{"faction_ids":["living_migration","baumeister"],"controller_kinds":[ControllerState.HUMAN,ControllerState.HUMAN],"simultaneous_combat":false})
 	var rules:=GameRules.new(state)
 	var unit: GameState.Unit=state.units[1]
 	var trade:=state.add_world_site("trade_post",unit.cell_id)
@@ -79,7 +79,7 @@ func test_site_rules() -> void:
 	check(not rules.try_site_interaction(1,ruin.id,"explore",unit.id).success,"Explored ruin cannot reroll its reward")
 
 func test_neutral_state_and_phase() -> void:
-	var state:=GameState.new(PlanetGrid.new(1))
+	var state:=GameState.new(PlanetGrid.new(1),{"simultaneous_combat":false})
 	var target: GameState.Unit=state.units[1]
 	var cell:=state.grid.get_neighbors(target.cell_id)[0]
 	while state.is_cell_blocked(cell): cell=state.grid.get_neighbors(target.cell_id)[state.grid.get_neighbors(target.cell_id).find(cell)+1]

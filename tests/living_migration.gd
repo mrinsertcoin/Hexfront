@@ -11,7 +11,7 @@ func check(ok: bool,message: String) -> void:
 		if failures<40: push_error(message)
 
 func make_state(first: String="living_migration",second: String="red") -> GameState:
-	return GameState.new(PlanetGrid.new(2),{"faction_ids":[first,second],"controller_kinds":[ControllerState.HUMAN,ControllerState.PLAYER_AI]})
+	return GameState.new(PlanetGrid.new(2),{"faction_ids":[first,second],"controller_kinds":[ControllerState.HUMAN,ControllerState.PLAYER_AI],"simultaneous_combat":false})
 
 func cycle_to_player_one(rules: GameRules) -> void:
 	if rules.state.active_player==1: rules.try_end_turn(1)
@@ -105,7 +105,8 @@ func test_ant_hill_connection_roads_and_corpses() -> void:
 	state.players[1].resources.synapse=0
 	check(rules.living_migration_rules.is_ant_connected(worker),"Connection does not depend on Synapse balance")
 	state.players[1].resources.synapse=100
-	check(not rules.queue_biological_production(1,1,"fighter_ant_brood").success,"Research gates advanced Ant Hill production")
+	check(rules.queue_biological_production(1,1,"fighter_ant_brood").success,"Fighter Ant provides a viable starting military recruit")
+	check(not rules.queue_biological_production(1,1,"fire_ant_brood").success,"Research gates advanced Ant Hill production")
 	var path: Array[int]=[]; var previous:=worker.cell_id; var roads: Dictionary=state.living_migration.roads[1].duplicate()
 	for _step in range(3):
 		var candidates: Array[int]=[]
@@ -117,7 +118,7 @@ func test_ant_hill_connection_roads_and_corpses() -> void:
 	check(rules.try_build_road(1,worker.id,path).success and path.size()==3,"Worker extends three contiguous road cells authoritatively")
 	check(not rules.try_build_road(1,worker.id,[state.grid.get_neighbors(previous)[0]]).success,"Worker cannot exceed three road cells in one turn")
 	var road_reach:=rules.reachable(1,worker.id); var active_roads:=rules.living_migration_rules.active_road_cells(1)
-	check(road_reach.all(func(cell_id: int)->bool: return cell_id in active_roads),"Road-bound movement cannot bypass active roads")
+	check(road_reach.any(func(cell_id: int)->bool: return cell_id not in active_roads),"Worker may traverse land beyond active roads so movement can extend the network")
 
 	var far:=state.grid.breadth_first(0).order[-2]
 	var fighter:=GameState.Unit.new(state.allocate_id(),1,"fighter_ant",far,-1,state.registry); state.units[fighter.id]=fighter
@@ -181,10 +182,10 @@ func test_marsh_and_caterpillar() -> void:
 	check(caterpillar.definition_id=="living_caterpillar" and caterpillar.development!=null,"Caterpillar carries reusable development state")
 	check(not rules.transform_caterpillar(1,caterpillar.id,"brimstone_butterfly").success,"Transformation is gated by time and nutrients")
 	cycle_to_player_one(rules)
-	var fresh:=first_free_neighbor(state,caterpillar.cell_id); rules.try_move(1,caterpillar.id,fresh)
-	check(caterpillar.development.nutrients_collected==2 and state.living_migration.terrain_at(fresh).kind==TerrainConsumptionState.Kind.DEPLETED,"Caterpillar gathers nutrients and depletes terrain")
-	caterpillar.development.progress_turns=caterpillar.development.required_turns
-	caterpillar.development.nutrients_collected=caterpillar.development.required_nutrients
+	var fresh:=first_free_neighbor(state,caterpillar.cell_id)
+	check(rules.consume(1,caterpillar.id,"vegetation",fresh).success,"Caterpillar explicitly consumes vegetation")
+	check(caterpillar.development.stored_food==4 and caterpillar.development.stored_matter==0 and state.living_migration.terrain_at(fresh).kind==TerrainConsumptionState.Kind.DEPLETED,"Vegetation grants content-defined Food and depletes once")
+	state.round_number=caterpillar.development.transformation_round; rules.living_migration_rules.process_round_start()
 	check(rules.transform_caterpillar(1,caterpillar.id,"brimstone_butterfly").success and state.units[caterpillar.id].definition_id=="brimstone_butterfly","Complete caterpillar transforms through authoritative rules")
 
 func test_mites_diseases_and_victory() -> void:

@@ -14,7 +14,7 @@ func check(ok: bool,message: String) -> void:
 
 func test_relationships_and_neutrals() -> void:
 	var grid:=PlanetGrid.new(1)
-	var state:=GameState.new(grid)
+	var state:=GameState.new(grid,{"simultaneous_combat":false})
 	var rules:=GameRules.new(state)
 	check(state.relationships.between(1,1)==RelationshipState.Kind.SELF,"Same controller relationship is SELF")
 	check(state.relationships.between(1,2)==RelationshipState.Kind.HOSTILE,"Prototype players are hostile")
@@ -42,7 +42,7 @@ func test_sites_and_occupancy() -> void:
 	var blocking:=WorldSiteDefinition.new()
 	blocking.id="sealed_ruin"; blocking.display_name="Sealed Ruin"; blocking.blocks_movement=true
 	registry.add_definition(blocking)
-	var state:=GameState.new(PlanetGrid.new(1),{},registry)
+	var state:=GameState.new(PlanetGrid.new(1),{"simultaneous_combat":false},registry)
 	var free_cell:=state.grid.get_neighbors(state.units[1].cell_id)[0]
 	while state.is_cell_blocked(free_cell): free_cell=state.grid.get_neighbors(state.units[1].cell_id)[1]
 	var trade:=state.add_world_site("trade_post",free_cell)
@@ -76,7 +76,7 @@ func test_population() -> void:
 	var changed_world:=GeneratedPlanet.generate(PlanetGrid.new(1),changed_recipe,false)
 	var changed:=WorldPopulationGenerator.generate(changed_world,registry,config)
 	check(changed.fingerprint!=first.fingerprint,"World population fingerprint changes with world seed")
-	var state:=GameState.new(world.grid_reference)
+	var state:=GameState.new(world.grid_reference,{"simultaneous_combat":false})
 	state.apply_population(first)
 	check(state.world_sites.size()==3,"Logical population result applies to GameState")
 

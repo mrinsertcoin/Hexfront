@@ -92,8 +92,11 @@ func _run() -> void:
 	drag(screen, screen + Vector2(2, 1))
 	check(board.selected_unit_id == 1, "Subthreshold motion remains a normal click")
 	var destination := board.rules.reachable(1, 1)[0]
+	# Faction-aware starts can place the first arbitrary reachable cell beneath a
+	# HUD panel. Frame the destination so this remains an actual viewport event.
+	var destination_screen:=_screen(destination)
 	var focus_before := nav.focus_direction
-	click(_screen(destination, false), MOUSE_BUTTON_RIGHT)
+	click(destination_screen, MOUSE_BUTTON_RIGHT)
 	check(board.game_state.units[1].cell_id == destination, "Movement command retained")
 	check(nav.focus_direction.is_equal_approx(focus_before), "Movement click does not recenter immediately")
 	var view := board.unit_views[1]

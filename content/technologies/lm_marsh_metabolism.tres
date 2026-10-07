@@ -6,5 +6,5 @@ id = "lm_marsh_metabolism"
 display_name = "Marsh Metabolism (Provisional)"
 research_cost = 5
 prerequisite_ids = PackedStringArray("lm_symbiotic_foundations")
-unlock_unit_ids = PackedStringArray("dragonfly", "mosquito", "poison_dart_frog", "bullfrog", "unke")
+unlock_unit_ids = PackedStringArray("dragonfly", "mosquito", "poison_dart_frog")
 unlock_tags = PackedStringArray("marsh_branch_improvement")

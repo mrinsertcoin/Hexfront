@@ -22,7 +22,7 @@ func apply_action(state: GameState, rules: GameRules, ai: SimpleAI) -> String:
 	return action.get("type", "end")
 
 func _run() -> void:
-	var state := GameState.new()
+	var state := GameState.new(null,{"simultaneous_combat":false})
 	var rules := GameRules.new(state)
 	var agents: Array[SimpleAI] = [SimpleAI.new(), SimpleAI.new()]
 	# Two independent deterministic matches: a passive human and AI versus AI.

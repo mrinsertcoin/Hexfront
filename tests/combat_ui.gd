@@ -31,8 +31,8 @@ func _fixture() -> void:
 	board.clear_selection()
 
 func _check_fresh() -> void:
-	# Fresh positions depend on the configured topology (Milestone 10 sizes).
-	var initial := GameState.new(board.grid)
+	# Rebuild the configured setup, including faction-aware starting suitability.
+	var initial := GameState.new(board.grid,board.game_state.setup)
 	check(board.game_state.units.size() == 6 and board.game_state.structures.size() == 2 and board.unit_views.size() == 8 and board.health_fills.size() == 8, "Restart restores six military units, two headquarters, and eight views/bars")
 	for id: int in initial.units:
 		var unit: GameState.Unit = board.game_state.units[id]
@@ -78,6 +78,8 @@ func _run() -> void:
 	board.set_process(false)
 	await process_frame
 	await process_frame
+	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.combat_planning_enabled=false
+	board._refresh_display()
 	_check_fresh()
 	var baseline_children: int = board.get_child_count() - board.tiles.size()
 	check(board.unit_views[5].get_node("visual_root/ModelRoot").get_child_count() == 1, "Gunner has exactly one model")

@@ -5,6 +5,7 @@ script = ExtResource("1")
 id = "greenhouse"
 display_name = "Greenhouse"
 costs = {"materials": 3}
+upkeep = {"energy": 1}
 turn_production = {"food": 3}
 construction_turns = 2
 tags = PackedStringArray("production", "food_production")

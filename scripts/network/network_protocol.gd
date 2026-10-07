@@ -2,12 +2,14 @@ class_name NetworkProtocol
 extends RefCounted
 ## Stable compatibility contract for multiplayer messages.
 
-const NETWORK_PROTOCOL_VERSION:=1
-const GAME_BUILD_VERSION:="0.1.0-dev"
-const GAMEPLAY_DATA_VERSION:=1
-const SNAPSHOT_SCHEMA_VERSION:=1
+const NETWORK_PROTOCOL_VERSION:=3
+const GAME_BUILD_VERSION:="0.2.0-m21-dev"
+const GAMEPLAY_DATA_VERSION:=4
+const SNAPSHOT_SCHEMA_VERSION:=4
 const DEFAULT_PORT:=24567
 const MAX_PLAYERS:=4
+const MIN_PLAYERS:=2
+const MULTIPLAYER_FACTIONS: PackedStringArray=["living_migration","baumeister"]
 const CONNECTION_TIMEOUT_SECONDS:=10.0
 const LOADING_TIMEOUT_SECONDS:=30.0
 

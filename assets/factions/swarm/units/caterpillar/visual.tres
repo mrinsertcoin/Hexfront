@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ModelVisualDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/view/model_visual_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "living_caterpillar"
+model_path = "res://assets/factions/swarm/units/caterpillar/source/caterpillar.glb"
+model_scale = Vector3(0.45, 0.45, 0.45)
+rotation_offset_degrees = Vector3(0, 180, 0)
+height_offset = 0.2
+notes = "Living Caterpillar; static M21A integration."

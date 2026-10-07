@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="CombatOptionDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/combat_option_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "counter"
+display_name = "Counter"
+description = "Block part of the first incoming hit and retaliate from the pre-resolution snapshot. Provisional Alpha values."
+damage_reduction = 2
+retaliation_damage = 2
+cooldown_rounds = 2
+trigger_limit = 1

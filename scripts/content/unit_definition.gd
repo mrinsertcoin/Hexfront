@@ -18,6 +18,7 @@ extends Resource
 @export_range(0,20) var vision_range: int=2
 @export_range(0,20) var detection_range: int=0
 @export var concealed: bool=false
+@export_range(1,20) var squad_size: int=1
 @export var tags: PackedStringArray=[]
 @export var visual_id: String
 @export_file("*.png","*.svg","*.webp") var icon_path: String
@@ -33,6 +34,6 @@ func validate() -> PackedStringArray:
 		if amount<0: errors.append("Unit %s has negative upkeep" % id)
 	for amount: int in turn_production.values():
 		if amount<0: errors.append("Unit %s has negative production" % id)
-	if corpse_food_value<0 or temporary_lifetime_turns<0 or deployed_attack_range<0 or deployed_attack_damage<0 or vision_range<0 or detection_range<0:
+	if corpse_food_value<0 or temporary_lifetime_turns<0 or deployed_attack_range<0 or deployed_attack_damage<0 or vision_range<0 or detection_range<0 or squad_size<1:
 		errors.append("Unit %s has invalid lifecycle/deployment values" % id)
 	return errors

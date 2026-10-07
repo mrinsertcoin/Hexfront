@@ -36,7 +36,10 @@ func start_turn(controller_id: int) -> void:
 	if state.baumeister.last_maintenance_serial.get(controller_id,-1)==state.turn_state.serial: return
 	state.baumeister.last_maintenance_serial[controller_id]=state.turn_state.serial
 	var player:=state.players[controller_id]; var config:=config_for(controller_id); var unpaid:=0
-	for pillar: GameState.Structure in _owned_pillars(controller_id): pillar.pillar_state.maintenance_paid=true
+	var integrity_bonus:=config.improved_integrity_bonus if research.has_unlock_tag(controller_id,"integrity_engineering") else 0
+	for pillar: GameState.Structure in _owned_pillars(controller_id):
+		pillar.pillar_state.maintenance_paid=true
+		pillar.pillar_state.max_integrity=config.pillar_max_integrity+integrity_bonus
 	for bridge: BridgeState in _owned_bridges(controller_id):
 		if not bridge.operational: continue
 		if player.resource_amount("materials")>=config.bridge_maintenance_materials:
@@ -46,7 +49,9 @@ func start_turn(controller_id: int) -> void:
 			if state.structures.has(bridge.endpoint_b):
 				var pillar: GameState.Structure=state.structures[bridge.endpoint_b]
 				pillar.pillar_state.maintenance_paid=false
-				pillar.pillar_state.integrity=maxi(0,pillar.pillar_state.integrity-config.neglected_integrity_loss)
+				var loss:=config.neglected_integrity_loss
+				if research.has_unlock_tag(controller_id,"integrity_engineering"): loss=maxi(0,loss-config.improved_neglect_reduction)
+				pillar.pillar_state.integrity=maxi(0,pillar.pillar_state.integrity-loss)
 	state.baumeister.unpaid_maintenance[controller_id]=unpaid
 
 func recalculate_supply(controller_id: int) -> Array[int]:
@@ -100,7 +105,10 @@ func bridge_path(source_cell: int,destination: int,controller_id: int) -> Array[
 func bridge_cost(controller_id: int,source_cell: int,destination: int) -> Dictionary[String,int]:
 	var path:=bridge_path(source_cell,destination,controller_id)
 	var structure:=state.registry.structure("pillar_city")
-	return {"materials":structure.costs.get("materials",0)+maxi(0,path.size()-1)*config_for(controller_id).bridge_material_cost_per_edge}
+	var config:=config_for(controller_id)
+	var edge_cost:=config.bridge_material_cost_per_edge
+	if research.has_unlock_tag(controller_id,"efficient_bridges"): edge_cost=maxi(1,edge_cost-config.efficient_bridge_cost_reduction)
+	return {"materials":structure.costs.get("materials",0)+maxi(0,path.size()-1)*edge_cost}
 
 func candidate_pillar_cells(actor: int,engineer_id: int,source_pillar_id: int) -> Array[int]:
 	var result: Array[int]=[]
@@ -115,9 +123,14 @@ func start_bridge_extension(actor: int,engineer_id: int,source_pillar_id: int,de
 	if not error.is_empty(): return RuleResult.new(false,error)
 	var source: GameState.Structure=state.structures[source_pillar_id]
 	var path:=bridge_path(source.cell_id,destination,actor); state.players[actor].apply_cost(bridge_cost(actor,source.cell_id,destination))
+	var config:=config_for(actor)
+	var improved:=research.has_unlock_tag(actor,"bridge_improvements")
 	var pillar:=GameState.Structure.new(state.allocate_id(),actor,"pillar_city",destination,-1,state.registry)
-	pillar.pillar_state=PillarState.new(config_for(actor).pillar_max_integrity,false); state.structures[pillar.id]=pillar
-	var bridge:=state.baumeister.add_bridge(actor,source.id,pillar.id,path,config_for(actor).bridge_construction_turns,config_for(actor).bridge_max_hp)
+	var integrity_bonus:=config.improved_integrity_bonus if research.has_unlock_tag(actor,"integrity_engineering") else 0
+	pillar.pillar_state=PillarState.new(config.pillar_max_integrity+integrity_bonus,false); state.structures[pillar.id]=pillar
+	var build_turns:=maxi(1,config.bridge_construction_turns-(config.improved_bridge_build_reduction if improved else 0))
+	var bridge_hp:=config.bridge_max_hp+(config.improved_bridge_hp_bonus if improved else 0)
+	var bridge:=state.baumeister.add_bridge(actor,source.id,pillar.id,path,build_turns,bridge_hp)
 	state.units[engineer_id].moved=true; state.units[engineer_id].attacked=true; recalculate_supply(actor)
 	return RuleResult.new(true,"Pillar %d founded; bridge %d construction started." % [pillar.id,bridge.id],path)
 
@@ -190,7 +203,7 @@ func district_support(actor: int,district_id: int,target_id: int) -> RuleResult:
 	if not error.is_empty(): return RuleResult.new(false,error)
 	if not state.baumeister.districts.has(district_id) or not state.units.has(target_id): return RuleResult.new(false,"Unknown district or target.")
 	var district: DistrictState=state.baumeister.districts[district_id]; var target: GameState.Unit=state.units[target_id]
-	if district.controller_id!=actor or target.controller_id!=actor or not district.completed: return RuleResult.new(false,"District support is unavailable.")
+	if district.controller_id!=actor or target.controller_id!=actor or not district.completed or not district.maintenance_paid: return RuleResult.new(false,"District support is unavailable.")
 	if district.last_action_serial==state.turn_state.serial: return RuleResult.new(false,"District support was already used this turn.")
 	var definition:=state.registry.district(district.definition_id); var target_tags:=state.registry.unit(target.definition_id).tags
 	if "heals_biological" in definition.tags and "biological" not in target_tags: return RuleResult.new(false,"Hospital only heals biological personnel.")
@@ -228,6 +241,7 @@ func repair_structure(actor: int,engineer_id: int,pillar_id: int) -> RuleResult:
 	if not state.players[actor].can_afford({"materials":config.repair_material_cost}): return RuleResult.new(false,"Insufficient Materials.")
 	state.players[actor].apply_cost({"materials":config.repair_material_cost})
 	var amount:=config.pillar_repair_amount+(config.supplied_repair_bonus if pillar.pillar_state.supplied else 0)
+	if research.has_unlock_tag(actor,"repair_improvements"): amount+=config.improved_repair_bonus
 	pillar.hp=mini(pillar.max_hp,pillar.hp+amount); pillar.pillar_state.integrity=mini(pillar.pillar_state.max_integrity,pillar.pillar_state.integrity+amount)
 	state.units[engineer_id].moved=true; state.units[engineer_id].attacked=true
 	return RuleResult.new(true,"Pillar repaired to %d HP / %d Integrity." % [pillar.hp,pillar.pillar_state.integrity])
@@ -257,7 +271,8 @@ func repair_bridge(actor: int,engineer_id: int,bridge_id: int) -> RuleResult:
 	if not in_range or bridge.hp>=bridge.max_hp: return RuleResult.new(false,"Bridge is out of range or undamaged.")
 	var config:=config_for(actor)
 	if not state.players[actor].can_afford({"materials":config.repair_material_cost}): return RuleResult.new(false,"Insufficient Materials.")
-	state.players[actor].apply_cost({"materials":config.repair_material_cost}); bridge.hp=mini(bridge.max_hp,bridge.hp+config.bridge_repair_amount)
+	var amount:=config.bridge_repair_amount+(config.improved_repair_bonus if research.has_unlock_tag(actor,"repair_improvements") else 0)
+	state.players[actor].apply_cost({"materials":config.repair_material_cost}); bridge.hp=mini(bridge.max_hp,bridge.hp+amount)
 	engineer.moved=true; engineer.attacked=true; recalculate_supply(actor)
 	return RuleResult.new(true,"Bridge repaired to %d/%d HP." % [bridge.hp,bridge.max_hp])
 
@@ -287,20 +302,27 @@ func movement_budget(unit: GameState.Unit) -> int:
 
 func economic_summary(controller_id: int) -> Dictionary:
 	var production: Dictionary[String,int]={}; var upkeep: Dictionary[String,int]={}
+	var unmaintained_districts:=0
 	for structure: GameState.Structure in state.structures.values():
 		if structure.controller_id==controller_id:
 			_add_records(production,state.registry.structure(structure.definition_id).turn_production)
 			_add_records(upkeep,state.registry.structure(structure.definition_id).upkeep)
 	for district: DistrictState in _owned_districts(controller_id):
 		if district.completed:
-			_add_records(production,state.registry.district(district.definition_id).turn_production)
-			_add_records(upkeep,state.registry.district(district.definition_id).upkeep)
+			var definition:=state.registry.district(district.definition_id)
+			if not district.maintenance_paid: unmaintained_districts+=1
+			if district.maintenance_paid:
+				_add_records(production,definition.turn_production)
+				if research.has_unlock_tag(controller_id,"district_specialization") and not definition.turn_production.is_empty():
+					for resource_id: String in definition.turn_production: production[resource_id]=production.get(resource_id,0)+config_for(controller_id).district_production_bonus
+			_add_records(upkeep,definition.upkeep)
 	for unit: GameState.Unit in state.units.values():
 		if unit.controller_id==controller_id:
-			_add_records(production,state.registry.unit(unit.definition_id).turn_production)
+			if unit.upkeep_paid: _add_records(production,state.registry.unit(unit.definition_id).turn_production)
 			_add_records(upkeep,state.registry.unit(unit.definition_id).upkeep)
 	upkeep.materials=upkeep.get("materials",0)+_owned_bridges(controller_id).filter(func(b: BridgeState)->bool: return b.operational).size()*config_for(controller_id).bridge_maintenance_materials
-	return {"production":production,"upkeep":upkeep,"unpaid_maintenance":state.baumeister.unpaid_maintenance.get(controller_id,0)}
+	return {"production":production,"upkeep":upkeep,"unpaid_maintenance":state.baumeister.unpaid_maintenance.get(controller_id,0),
+		"unmaintained_districts":unmaintained_districts}
 
 func _engineer_target_error(actor: int,engineer_id: int,pillar_id: int) -> String:
 	var error:=RuleAuthority.actor_error(state,actor)

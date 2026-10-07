@@ -13,7 +13,7 @@ func check(ok: bool, message: String) -> void:
 		push_error(message)
 
 func fixture(start: int = 0, allowance: int = 3) -> GameState:
-	var state := GameState.new(grid)
+	var state := GameState.new(grid,{"simultaneous_combat":false})
 	state.units.clear()
 	state.structures.clear()
 	state.units[1] = GameState.Unit.new(1, 1, "Scout", start, allowance)
@@ -47,7 +47,7 @@ func distances(start: int, blocked: Dictionary) -> Dictionary:
 
 func _run() -> void:
 	var detours: int = 0
-	var initial := GameState.new(grid)
+	var initial := GameState.new(grid,{"simultaneous_combat":false})
 	check(initial.units.size() == 6 and initial.structures.size() == 2, "Starting force preserved")
 	var occupied: Dictionary = {}
 	for unit: GameState.Unit in initial.units.values():

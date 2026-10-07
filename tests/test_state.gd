@@ -11,7 +11,7 @@ static func snapshot(state: GameState) -> String:
 	for id: int in state.units:
 		var unit: GameState.Unit = state.units[id]
 		values.append([id, unit.id, unit.controller_id, unit.definition_id, unit.cell_id, unit.movement,
-			unit.moved, unit.attacked, unit.ready_next_turn, unit.hp, unit.max_hp, unit.attack_range, unit.attack_damage,
+			unit.moved, unit.attacked, unit.ready_next_turn, unit.upkeep_paid, unit.hp, unit.max_hp, unit.attack_range, unit.attack_damage,
 			unit.remaining_lifetime_turns,unit.disconnected_turns,unit.road_segments_built_this_turn,unit.selected_disease_id,
 			unit.disease_immunities.duplicate(),unit.active_disease.snapshot() if unit.active_disease!=null else {},
 			unit.spider_state.snapshot() if unit.spider_state!=null else {},unit.development.snapshot() if unit.development!=null else {},

@@ -13,6 +13,9 @@ var command_type: OptionButton
 var parameters_edit: LineEdit
 var feedback_label: Label
 var revision_label: Label
+var players_label: RichTextLabel
+var send_button: Button
+var end_turn_button: Button
 
 func configure(value: NetworkSession) -> void: session=value
 
@@ -27,6 +30,7 @@ func _ready() -> void:
 	var heading:=Label.new(); heading.text="HEXFRONT — Network Match"; heading.add_theme_font_size_override("font_size",28); column.add_child(heading)
 	connection_label=Label.new(); turn_label=Label.new(); revision_label=Label.new(); resources_label=Label.new()
 	column.add_child(connection_label); column.add_child(turn_label); column.add_child(revision_label); column.add_child(resources_label)
+	players_label=RichTextLabel.new(); players_label.bbcode_enabled=true; players_label.fit_content=true; players_label.custom_minimum_size.y=90; column.add_child(players_label)
 	entities_label=RichTextLabel.new(); entities_label.bbcode_enabled=true; entities_label.fit_content=false
 	entities_label.size_flags_vertical=Control.SIZE_EXPAND_FILL; entities_label.custom_minimum_size.y=260; column.add_child(entities_label)
 	var help:=Label.new(); help.text="Development command interface — parameters are a JSON object using stable entity/content IDs."
@@ -37,8 +41,8 @@ func _ready() -> void:
 	row.add_child(command_type)
 	parameters_edit=LineEdit.new(); parameters_edit.placeholder_text='{"unit_id": 1, "destination": 42}'
 	parameters_edit.size_flags_horizontal=Control.SIZE_EXPAND_FILL; row.add_child(parameters_edit)
-	var send:=Button.new(); send.text="Send Command"; send.pressed.connect(_send_command); row.add_child(send)
-	var end_turn:=Button.new(); end_turn.text="End Turn"; end_turn.pressed.connect(func()->void: session.submit_command(CommandDispatcher.END_TURN,{})); row.add_child(end_turn)
+	send_button=Button.new(); send_button.text="Send Command"; send_button.pressed.connect(_send_command); row.add_child(send_button)
+	end_turn_button=Button.new(); end_turn_button.text="End Turn"; end_turn_button.pressed.connect(func()->void: session.submit_command(CommandDispatcher.END_TURN,{})); row.add_child(end_turn_button)
 	feedback_label=Label.new(); feedback_label.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART; column.add_child(feedback_label)
 	var leave:=Button.new(); leave.text="Leave Match"; leave.pressed.connect(func()->void: leave_requested.emit()); column.add_child(leave)
 	if session==null:
@@ -68,7 +72,18 @@ func _show_result(result: Dictionary) -> void:
 
 func _show_observation(snapshot: Dictionary) -> void:
 	var turn: Dictionary=snapshot.get("turn",{})
-	turn_label.text="Active player: P%d | Round %d%s" % [int(turn.get("active_player",0)),int(turn.get("round_number",0))," | Neutral phase" if bool(turn.get("neutral_phase",false)) else ""]
+	var winner_id:=int(turn.get("winner_id",0))
+	turn_label.text="Active player: P%d | Round %d%s%s" % [int(turn.get("active_player",0)),int(turn.get("round_number",0)),
+		" | Neutral phase" if bool(turn.get("neutral_phase",false)) else ""," | Match complete" if winner_id!=0 else ""]
+	var player_lines:=PackedStringArray(["[b]PLAYERS[/b]"])
+	for player: Dictionary in snapshot.get("players",[]):
+		var marker:="WINNER" if int(player.player_id)==winner_id else ("ELIMINATED" if bool(player.get("defeated",false)) else ("ACTIVE" if int(player.player_id)==int(turn.get("active_player",0)) else "ALIVE"))
+		if not bool(player.get("connected",true)): marker+=" / DISCONNECTED"
+		player_lines.append("[color=%s]●[/color] P%d %s · %s · %s" % [String(player.get("player_color","#9ca3a5")),
+			int(player.player_id),String(player.get("player_name","Player")),String(player.faction_id).replace("_"," ").capitalize(),marker])
+	players_label.text="\n".join(player_lines)
+	var may_act:=winner_id==0 and not bool(turn.get("neutral_phase",false)) and int(turn.get("active_player",0))==session.local_player_id and session.status==NetworkSession.Status.ACTIVE
+	send_button.disabled=not may_act; end_turn_button.disabled=not may_act
 	revision_label.text="Synchronization revision: %d | Visibility revision: %d" % [int(snapshot.get("sync_revision",0)),int(snapshot.get("visibility_revision",0))]
 	var own: Dictionary=snapshot.get("own_player",{})
 	resources_label.text="Faction: %s | Resources: %s" % [String(own.get("faction_id","")),JSON.stringify(own.get("resources",{}))]
@@ -84,4 +99,9 @@ func _show_observation(snapshot: Dictionary) -> void:
 		lines.append("#%d  last seen at cell %d" % [int(contact.contact_id),int(contact.last_known_cell_id)])
 	lines.append("\n[b]Discovered sites[/b]")
 	for site: Dictionary in snapshot.get("observed_sites",[]): lines.append("#%d  %s  cell %d" % [int(site.id),String(site.definition_id),int(site.cell_id)])
+	if winner_id!=0:
+		for player: Dictionary in snapshot.get("players",[]):
+			if int(player.player_id)==winner_id:
+				lines.append("\n[b]%s wins as %s in round %d after %ds.[/b]" % [String(player.get("player_name","Player")),
+					String(player.faction_id).replace("_"," ").capitalize(),int(turn.get("round_number",0)),int(turn.get("match_duration_seconds",0))])
 	entities_label.text="\n".join(lines)

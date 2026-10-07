@@ -9,6 +9,7 @@ var definition_id: String
 var construction_progress: int=0
 var required_turns: int=1
 var last_action_serial: int=-1
+var maintenance_paid: bool=true
 
 var completed: bool:
 	get: return construction_progress>=required_turns
@@ -19,4 +20,4 @@ func _init(district_id: int=0,controller: int=0,pillar: int=0,cell: int=0,defini
 func snapshot() -> Dictionary:
 	return {"id":id,"controller_id":controller_id,"pillar_id":pillar_id,"cell_id":cell_id,
 		"definition_id":definition_id,"construction_progress":construction_progress,"required_turns":required_turns,
-		"last_action_serial":last_action_serial}
+		"last_action_serial":last_action_serial,"maintenance_paid":maintenance_paid}

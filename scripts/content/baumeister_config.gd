@@ -22,6 +22,13 @@ extends Resource
 @export var designation_damage_bonus: int=1
 @export var research_per_civic_monument: int=1
 @export var hero_limit: int=1
+@export var efficient_bridge_cost_reduction: int=1
+@export var improved_bridge_hp_bonus: int=4
+@export var improved_bridge_build_reduction: int=1
+@export var district_production_bonus: int=1
+@export var improved_repair_bonus: int=2
+@export var improved_integrity_bonus: int=5
+@export var improved_neglect_reduction: int=1
 
 func validate() -> PackedStringArray:
 	var errors:=PackedStringArray()
@@ -29,7 +36,9 @@ func validate() -> PackedStringArray:
 			bridge_max_hp,bridge_maintenance_materials,pillar_max_integrity,neglected_integrity_loss,
 			pillar_repair_amount,bridge_repair_amount,unit_repair_amount,repair_material_cost,
 			supplied_repair_bonus,integrity_damage_divisor,bridge_edge_cost,ordinary_edge_cost,designation_range,
-			designation_duration_turns,designation_damage_bonus,research_per_civic_monument,hero_limit]:
+			designation_duration_turns,designation_damage_bonus,research_per_civic_monument,hero_limit,
+			efficient_bridge_cost_reduction,improved_bridge_hp_bonus,improved_bridge_build_reduction,
+			district_production_bonus,improved_repair_bonus,improved_integrity_bonus,improved_neglect_reduction]:
 		if value<0: errors.append("Baumeister configuration contains a negative value.")
 	if max_bridge_distance<=0 or bridge_construction_turns<=0 or bridge_max_hp<=0 or pillar_max_integrity<=0:
 		errors.append("Baumeister infrastructure limits must be positive.")
@@ -37,9 +46,11 @@ func validate() -> PackedStringArray:
 	return errors
 
 func gameplay_record() -> String:
-	return "%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d" % [
+	return var_to_str([
 		max_bridge_distance,bridge_material_cost_per_edge,bridge_construction_turns,bridge_max_hp,
 		bridge_maintenance_materials,pillar_max_integrity,neglected_integrity_loss,pillar_repair_amount,
 		bridge_repair_amount,unit_repair_amount,repair_material_cost,supplied_repair_bonus,
 		integrity_damage_divisor,bridge_edge_cost,ordinary_edge_cost,designation_range,designation_duration_turns,
-		designation_damage_bonus,research_per_civic_monument,hero_limit]
+		designation_damage_bonus,research_per_civic_monument,hero_limit,efficient_bridge_cost_reduction,
+		improved_bridge_hp_bonus,improved_bridge_build_reduction,district_production_bonus,
+		improved_repair_bonus,improved_integrity_bonus,improved_neglect_reduction])

@@ -19,6 +19,11 @@ var network_port: SpinBox
 var network_faction: OptionButton
 var network_feedback: Label
 var network_ready: bool=false
+var network_slots: OptionButton
+var network_planet_size: OptionButton
+var network_population: OptionButton
+var network_seed: LineEdit
+var disconnected_player_id: int=0
 
 # Public references make keyboard focus and UI flow straightforward to verify.
 var new_game_button: Button
@@ -183,6 +188,16 @@ func show_host_setup() -> void:
 	screen_name="host_setup"
 	var column:=_menu_column("Host Game",520)
 	_network_identity_controls(column,false)
+	network_slots=_option(PackedStringArray(["2 players","3 players","4 players"]),2)
+	for index in range(network_slots.item_count): network_slots.set_item_metadata(index,index+2)
+	_row(column,"Player slots",network_slots)
+	network_planet_size=OptionButton.new()
+	for size: MatchConfig.PlanetSize in MatchConfig.normal_planet_sizes():
+		var definition: Dictionary=MatchConfig.SIZE_DEFINITIONS[size]
+		network_planet_size.add_item(definition.name); network_planet_size.set_item_metadata(network_planet_size.item_count-1,size)
+	_row(column,"Planet size",network_planet_size)
+	network_population=_option(PackedStringArray(WorldPopulationConfig.PRESETS),2); _row(column,"World population",network_population)
+	network_seed=LineEdit.new(); network_seed.text=str(48293617); _row(column,"World seed",network_seed)
 	var actions:=HBoxContainer.new(); actions.add_theme_constant_override("separation",8); column.add_child(actions)
 	_button(actions,"Back",show_multiplayer_menu).size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	_button(actions,"Create Lobby",_create_network_lobby).size_flags_horizontal=Control.SIZE_EXPAND_FILL
@@ -201,13 +216,19 @@ func _network_identity_controls(column: VBoxContainer,joining: bool) -> void:
 		network_address=LineEdit.new(); network_address.text="127.0.0.1"; network_address.placeholder_text="Host IP address"; _row(column,"Host address",network_address)
 	network_port=SpinBox.new(); network_port.min_value=1; network_port.max_value=65535; network_port.value=NetworkProtocol.DEFAULT_PORT; network_port.allow_greater=false; _row(column,"UDP port",network_port)
 	network_faction=OptionButton.new()
-	for faction: FactionDefinition in ContentRegistry.default().playable_factions():
+	for faction: FactionDefinition in _multiplayer_factions():
 		network_faction.add_item(faction.display_name); network_faction.set_item_metadata(network_faction.item_count-1,faction.id)
 	_row(column,"Faction",network_faction)
 	network_feedback=Label.new(); network_feedback.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART; network_feedback.modulate=Color("#f2b8a0"); column.add_child(network_feedback)
 
 func _create_network_lobby() -> void:
-	var error:=network_session.host_game(int(network_port.value),network_name.text,String(network_faction.get_item_metadata(network_faction.selected)))
+	var seed_value: Variant=_parse_seed(network_seed.text)
+	if seed_value==null:
+		network_feedback.text="Enter a signed 64-bit world seed."; return
+	var configuration: Dictionary={"planet_size":int(network_planet_size.get_item_metadata(network_planet_size.selected)),
+		"world_seed":int(seed_value),"world_population_preset":network_population.get_item_text(network_population.selected)}
+	var error:=network_session.host_game(int(network_port.value),network_name.text,
+		String(network_faction.get_item_metadata(network_faction.selected)),int(network_slots.get_item_metadata(network_slots.selected)),configuration)
 	if error==OK: network_ready=false; show_network_lobby()
 	else: network_feedback.text=network_session.status_message
 
@@ -225,13 +246,23 @@ func show_network_lobby() -> void:
 	var lines:=PackedStringArray()
 	for record: Dictionary in network_session.lobby_records():
 		var faction:=ContentRegistry.default().faction(String(record.faction_id))
-		lines.append("P%d  %s  —  %s  —  %s%s" % [int(record.player_id),String(record.player_name),faction.display_name if faction!=null else String(record.faction_id),"READY" if bool(record.ready) else "not ready","  [HOST]" if bool(record.host) else ""])
+		lines.append("P%d  %s  —  %s  —  %s  —  %s  —  %s%s" % [int(record.player_id),String(record.player_name),
+			faction.display_name if faction!=null else String(record.faction_id),String(record.get("color_name","Color")),
+			"READY" if bool(record.ready) else "not ready","connected" if bool(record.get("connected",true)) else "disconnected",
+			"  [HOST]" if bool(record.host) else ""])
 	players.text="\n".join(lines); column.add_child(players)
+	var config:=network_session.lobby_match_config
+	var size: Dictionary=MatchConfig.SIZE_DEFINITIONS.get(int(config.get("planet_size",MatchConfig.PlanetSize.SMALL)),MatchConfig.SIZE_DEFINITIONS[MatchConfig.PlanetSize.SMALL])
+	var match_info:=Label.new(); match_info.text="MATCH  %s planet  ·  Seed %d  ·  Population %s  ·  Capacity %d" % [
+		String(size.name),int(config.get("world_seed",0)),String(config.get("world_population_preset",WorldPopulationConfig.STANDARD)),network_session.lobby_capacity]
+	match_info.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART; match_info.modulate=Color("#a8bac8"); column.add_child(match_info)
 	var choice:=OptionButton.new()
-	for faction: FactionDefinition in ContentRegistry.default().playable_factions():
+	for faction: FactionDefinition in _multiplayer_factions():
 		choice.add_item(faction.display_name); choice.set_item_metadata(choice.item_count-1,faction.id)
 		if faction.id==network_session.local_faction_id: choice.select(choice.item_count-1)
-	choice.item_selected.connect(func(index: int)->void: network_session.set_local_lobby_choice(String(choice.get_item_metadata(index)),network_ready))
+	choice.item_selected.connect(func(index: int)->void:
+		network_ready=false
+		network_session.set_local_lobby_choice(String(choice.get_item_metadata(index)),false))
 	_row(column,"Your faction",choice)
 	var ready:=CheckButton.new(); ready.text="Ready"; ready.button_pressed=network_ready
 	ready.toggled.connect(func(value: bool)->void: network_ready=value; network_session.set_local_lobby_choice(network_session.local_faction_id,value))
@@ -242,13 +273,15 @@ func show_network_lobby() -> void:
 
 func _start_network_match() -> void:
 	if not network_session.can_host_start(): return
-	var config:=MatchConfig.new(); config.network_match=true; config.planet_size=MatchConfig.PlanetSize.SMALL
-	config.world_seed=int(Time.get_unix_time_from_system()) ^ Time.get_ticks_msec()
+	var config:=MatchConfig.new(); config.network_match=true
+	config.planet_size=int(network_session.lobby_match_config.get("planet_size",MatchConfig.PlanetSize.SMALL))
+	config.world_seed=int(network_session.lobby_match_config.get("world_seed",48293617))
 	config.private_population_seed=config.world_seed ^ 0x51A7E3D
-	config.world_population_preset=WorldPopulationConfig.STANDARD
+	config.world_population_preset=String(network_session.lobby_match_config.get("world_population_preset",WorldPopulationConfig.STANDARD))
 	for record: Dictionary in network_session.lobby_records():
 		config.player_assignments.append({"player_id":int(record.player_id),"player_name":String(record.player_name),
-			"faction_id":String(record.faction_id),"team_id":int(record.player_id),"controller_kind":ControllerState.HUMAN})
+			"faction_id":String(record.faction_id),"team_id":int(record.player_id),"controller_kind":ControllerState.HUMAN,
+			"player_color":String(record.player_color)})
 	config.player_faction_id=String(config.player_assignments[0].faction_id)
 	config.opponent_faction_id=String(config.player_assignments[1].faction_id)
 	config.player_team_id=int(config.player_assignments[0].team_id); config.opponent_team_id=int(config.player_assignments[1].team_id)
@@ -273,29 +306,48 @@ func _network_match_announced(config_data: Dictionary) -> void:
 func _network_status_changed(status: int,message: String) -> void:
 	if network_feedback!=null and is_instance_valid(network_feedback): network_feedback.text=message
 	if status==NetworkSession.Status.LOBBY and screen_name=="join_setup": network_ready=false; show_network_lobby()
+	elif status==NetworkSession.Status.ACTIVE and screen_name=="network_interrupt" and network_session.role==NetworkSession.Role.CLIENT:
+		disconnected_player_id=0; _clear_menu(); screen_name="network_game"
 	elif status==NetworkSession.Status.ERROR and screen_name in ["join_setup","host_setup"] and network_feedback!=null: network_feedback.text=message
 
-func _network_lobby_changed(_players: Array) -> void:
+func _network_lobby_changed(players: Array) -> void:
+	for record: Dictionary in players:
+		if int(record.player_id)==network_session.local_player_id: network_ready=bool(record.ready)
 	if screen_name=="lobby": show_network_lobby()
 
 func _network_session_ended(reason: String) -> void:
-	if screen_name not in ["game","network_game","lobby"]: return
+	if screen_name not in ["game","network_game","lobby","network_interrupt"]: return
 	_clear_match(); music_manager.play_title(); screen_name="multiplayer"
 	var column:=_menu_column("Multiplayer Session Ended",520)
 	var message:=Label.new(); message.text=reason; message.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART; column.add_child(message)
 	_button(column,"Back",show_main_menu)
 
-func _network_participant_disconnected(_player_id: int,player_name: String) -> void:
-	if network_session.role!=NetworkSession.Role.HOST or screen_name!="game": return
+func _network_participant_disconnected(player_id: int,player_name: String) -> void:
+	if screen_name not in ["game","network_game"]: return
+	disconnected_player_id=player_id
 	screen_name="network_interrupt"
 	var column:=_menu_column("Player Disconnected",520,true)
 	var message:=Label.new(); message.text="%s disconnected. The authoritative match is paused." % player_name; message.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART; column.add_child(message)
-	_button(column,"Abort Match to Lobby",_abort_network_match_to_lobby)
+	if network_session.role==NetworkSession.Role.HOST:
+		_button(column,"Remove Player",_remove_disconnected_network_player)
+		_button(column,"Abort Match to Lobby",_abort_network_match_to_lobby)
 	_button(column,"Main Menu",show_main_menu)
+
+func _remove_disconnected_network_player() -> void:
+	if not network_session.remove_disconnected_player(disconnected_player_id): return
+	disconnected_player_id=0; _clear_menu(); screen_name="game"
+	if board!=null: board._refresh_display()
 
 func _abort_network_match_to_lobby() -> void:
 	network_session.abort_match_to_lobby("Match aborted after a disconnect.")
 	_clear_match(); show_network_lobby()
+
+func _multiplayer_factions() -> Array[FactionDefinition]:
+	var result: Array[FactionDefinition]=[]
+	for faction_id: String in NetworkProtocol.MULTIPLAYER_FACTIONS:
+		var faction:=ContentRegistry.default().faction(faction_id)
+		if faction!=null and faction.playable: result.append(faction)
+	return result
 
 func show_match_setup() -> void:
 	music_manager.play_title()

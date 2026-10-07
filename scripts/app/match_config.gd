@@ -53,12 +53,15 @@ func validate(registry: ContentRegistry=ContentRegistry.default()) -> PackedStri
 	if not player_assignments.is_empty():
 		if player_assignments.size()<2 or player_assignments.size()>NetworkProtocol.MAX_PLAYERS: errors.append("Multiplayer requires two to four players.")
 		var player_ids:={}
+		var team_ids_seen:={}
 		for assignment: Dictionary in player_assignments:
-			var id:=int(assignment.get("player_id",0)); var faction_id:=String(assignment.get("faction_id",""))
+			var id:=int(assignment.get("player_id",0)); var team_id:=int(assignment.get("team_id",id)); var faction_id:=String(assignment.get("faction_id",""))
 			var faction:=registry.faction(faction_id)
 			if id<=0 or player_ids.has(id): errors.append("Multiplayer player IDs must be unique and positive.")
 			player_ids[id]=true
-			if faction==null or not faction.playable: errors.append("Multiplayer assignment has an invalid faction.")
+			if team_id!=id or team_ids_seen.has(team_id): errors.append("FFA players must each use their own unique team.")
+			team_ids_seen[team_id]=true
+			if faction==null or faction_id not in NetworkProtocol.MULTIPLAYER_FACTIONS: errors.append("Multiplayer assignment has an invalid faction.")
 	return errors
 
 func copy() -> MatchConfig:
@@ -76,6 +79,26 @@ func faction_ids() -> Array[String]:
 	if player_assignments.is_empty(): return [player_faction_id,opponent_faction_id]
 	var result: Array[String]=[]
 	for assignment: Dictionary in _sorted_assignments(): result.append(String(assignment.faction_id))
+	return result
+
+func player_ids() -> Array[int]:
+	if player_assignments.is_empty(): return [1,2]
+	var result: Array[int]=[]
+	for assignment: Dictionary in _sorted_assignments(): result.append(int(assignment.player_id))
+	return result
+
+func player_names() -> Array[String]:
+	if player_assignments.is_empty(): return ["Player 1","Player 2"]
+	var result: Array[String]=[]
+	for assignment: Dictionary in _sorted_assignments(): result.append(String(assignment.get("player_name","Player %d" % int(assignment.player_id))))
+	return result
+
+func player_colors() -> Array[String]:
+	if player_assignments.is_empty(): return [PlayerIdentity.color_hex_for_slot(0),PlayerIdentity.color_hex_for_slot(1)]
+	var result: Array[String]=[]
+	for assignment: Dictionary in _sorted_assignments():
+		var player_id:=int(assignment.player_id)
+		result.append(String(assignment.get("player_color",PlayerIdentity.color_hex_for_slot(maxi(0,player_id-1)))))
 	return result
 
 func team_ids() -> Array[int]:

@@ -20,7 +20,7 @@ func spawn_cell(state: GameState) -> int:
 	return state.grid.get_neighbors(0)[3]
 
 func _run() -> void:
-	var state := GameState.new()
+	var state := GameState.new(null,{"simultaneous_combat":false})
 	var rules := GameRules.new(state)
 	check(state.materials == {1: 11, 2: 8}, "Initial income included in core initialization")
 	var initial: String = Snapshot.snapshot(state)
@@ -94,7 +94,7 @@ func _run() -> void:
 		var before: String = Snapshot.snapshot(state)
 		var preview: GameRules.Result = rules.preview_attack(winner, 1, enemy_hq)
 		check(preview.killed and preview.winner_id == winner and Snapshot.snapshot(state) == before, "HQ lethal preview is pure")
-		check(rules.try_attack(winner, 1, enemy_hq).winner_id == winner and state.units.has(2), "HQ death wins with enemy troops surviving")
+		check(rules.try_attack(winner, 1, enemy_hq).winner_id == winner and not state.units.has(2), "HQ death wins and removes the eliminated player's remaining troops")
 		before = Snapshot.snapshot(state)
 		check(not rules.try_move(winner, 4, state.grid.get_neighbors(state.units[4].cell_id)[0]).success, "No moves after victory")
 		check(not rules.try_attack(winner, 4, 2).success, "No attacks after victory")

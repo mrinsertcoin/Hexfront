@@ -18,7 +18,8 @@ func cell_at_distance(grid: PlanetGrid,start: int,distance: int) -> int:
 	return -1
 
 func empty_state(grid: PlanetGrid=PlanetGrid.new(2),registry: ContentRegistry=null,setup: Dictionary={}) -> GameState:
-	var state:=GameState.new(grid,setup,registry)
+	var legacy_setup:=setup.duplicate(true); legacy_setup["simultaneous_combat"]=false
+	var state:=GameState.new(grid,legacy_setup,registry)
 	state.units.clear(); state.structures.clear(); state.world_sites.clear(); state.visibility_system.reset(); state.refresh_visibility()
 	return state
 

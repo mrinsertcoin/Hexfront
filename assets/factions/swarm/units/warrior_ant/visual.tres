@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ModelVisualDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/view/model_visual_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "fighter_ant"
+model_path = "res://assets/factions/swarm/units/warrior_ant/source/warrior_ant.glb"
+model_scale = Vector3(0.42, 0.42, 0.42)
+rotation_offset_degrees = Vector3(0, 180, 0)
+height_offset = 0.32
+notes = "Warrior Ant source mapped to the Fighter Ant gameplay role; static M21A integration."

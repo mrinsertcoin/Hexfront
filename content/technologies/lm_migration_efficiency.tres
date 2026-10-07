@@ -6,4 +6,4 @@ id = "lm_migration_efficiency"
 display_name = "Migration Efficiency (Provisional)"
 research_cost = 6
 prerequisite_ids = PackedStringArray("lm_symbiotic_foundations")
-unlock_tags = PackedStringArray("improved_mite_interval", "clearing_improvement", "synapse_improvement")
+unlock_tags = PackedStringArray("improved_mite_interval")

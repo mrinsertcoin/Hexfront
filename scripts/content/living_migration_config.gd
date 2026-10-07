@@ -24,7 +24,22 @@ extends Resource
 @export var research_per_building: int=1
 @export var food_per_food_building: int=2
 @export var synapse_per_synapse_building: int=1
+@export var improved_harvest_bonus: int=1
+@export var improved_regrowth_reduction: int=1
+@export var nursery_development_reduction: int=1
+@export var caterpillar_nutrient_bonus: int=1
+@export var caterpillar_requirement_reduction: int=1
+@export var temporary_lifetime_bonus: int=1
+@export var improved_connection_range_bonus: int=1
+@export var improved_road_segments_bonus: int=1
+@export var improved_synapse_building_bonus: int=1
 @export var starting_nursery_branch: String="ant_hill"
+@export var larva_maturation_rounds: int=5
+@export_range(0,100) var larva_success_percent: int=25
+@export var larva_interaction_range: int=1
+@export var caterpillar_transformation_rounds: int=5
+@export var vegetation_nutrients: Dictionary[String,int]={"food":4,"matter":0}
+@export var corpse_nutrients: Dictionary[String,int]={"food":0,"matter":4}
 
 func validate() -> PackedStringArray:
 	var errors:=PackedStringArray()
@@ -34,12 +49,17 @@ func validate() -> PackedStringArray:
 			internal_building_food_cost,mite_production_interval,improved_mite_interval,
 			ant_hill_connection_range,queen_connection_range,road_segments_per_turn,
 			road_food_cost_per_cell,disconnection_limit,research_per_building,
-			food_per_food_building,synapse_per_synapse_building]:
+			food_per_food_building,synapse_per_synapse_building,improved_harvest_bonus,
+			improved_regrowth_reduction,nursery_development_reduction,caterpillar_nutrient_bonus,caterpillar_requirement_reduction,
+			temporary_lifetime_bonus,improved_connection_range_bonus,improved_road_segments_bonus,
+			improved_synapse_building_bonus,larva_maturation_rounds,larva_success_percent,larva_interaction_range,
+			caterpillar_transformation_rounds]:
 		if value<0: errors.append("Living Migration configuration contains a negative value")
 	if internal_slot_count<=0 or nursery_slot_count<=0 or mite_production_interval<=0:
 		errors.append("Living Migration slot counts and mite interval must be positive")
 	if starting_nursery_branch not in ["","ant_hill","marsh","caterpillar_foliage"]:
 		errors.append("Invalid Living Migration starting nursery branch")
+	if larva_success_percent>100: errors.append("Larva success percent must be 0..100")
 	return errors
 
 func gameplay_record() -> String:
@@ -50,4 +70,8 @@ func gameplay_record() -> String:
 		internal_construction_turns,internal_building_food_cost,mite_production_interval,
 		improved_mite_interval,ant_hill_connection_range,queen_connection_range,
 		road_segments_per_turn,road_food_cost_per_cell,disconnection_limit,
-		research_per_building,food_per_food_building,synapse_per_synapse_building,starting_nursery_branch])
+		research_per_building,food_per_food_building,synapse_per_synapse_building,improved_harvest_bonus,
+		improved_regrowth_reduction,nursery_development_reduction,caterpillar_nutrient_bonus,caterpillar_requirement_reduction,
+		temporary_lifetime_bonus,improved_connection_range_bonus,improved_road_segments_bonus,
+		improved_synapse_building_bonus,starting_nursery_branch,larva_maturation_rounds,larva_success_percent,
+		larva_interaction_range,caterpillar_transformation_rounds,vegetation_nutrients,corpse_nutrients])

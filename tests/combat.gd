@@ -16,7 +16,7 @@ func snapshot(state: GameState) -> String:
 	return preload("res://tests/test_state.gd").snapshot(state)
 
 func fixture(kind: String = "Infantry", destination: int = -1) -> GameState:
-	var state := GameState.new(grid)
+	var state := GameState.new(grid,{"simultaneous_combat":false})
 	state.units.clear()
 	state.units[1] = GameState.Unit.new(1, 1, kind, 0)
 	state.units[2] = GameState.Unit.new(2, 2, "Scout", route[1] if destination == -1 else destination)
@@ -137,7 +137,7 @@ func test_death_and_victory() -> void:
 		check(rules.try_move(winner, 4, rules.reachable(winner, 4)[0]).success, "Ready unit can move when no HQ destroyed")
 		check(snapshot(state) != before, "State changes when no victory is declared")
 		check(rules.try_end_turn(winner).success, "Turn can advance when no HQ destroyed")
-		var initial: String = snapshot(GameState.new(grid))
+		var initial: String = snapshot(GameState.new(grid,{"simultaneous_combat":false}))
 		for repetition in range(3):
 			rules.restart_match()
 			check(snapshot(state) == initial, "Restart restores exact initial logical state")
@@ -145,7 +145,7 @@ func test_death_and_victory() -> void:
 			check(rules.try_end_turn(1).success, "Restarted state can advance turns")
 
 	# Headquarters destruction wins immediately
-	var state2: GameState = GameState.new(grid)
+	var state2: GameState = GameState.new(grid,{"simultaneous_combat":false})
 	# Clear default units and place an attacker and enemy HQ
 	state2.units.clear()
 	state2.units[1] = GameState.Unit.new(1, 1, "Infantry", 0)

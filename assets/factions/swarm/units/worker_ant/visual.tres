@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ModelVisualDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/view/model_visual_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "worker_ant"
+model_path = "res://assets/factions/swarm/units/worker_ant/source/worker_ant.glb"
+model_scale = Vector3(0.38, 0.38, 0.38)
+rotation_offset_degrees = Vector3(0, 180, 0)
+height_offset = 0.21
+notes = "Worker Ant; static M21A integration."

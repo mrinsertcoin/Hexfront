@@ -9,8 +9,9 @@ static func encode(state: GameState,controller_id: int,sync_revision: int,events
 	var public_players: Array[Dictionary]=[]
 	for id: int in _sorted_int_keys(state.players):
 		var entry: PlayerState=state.players[id]
-		public_players.append({"player_id":id,"faction_id":entry.faction_id,"team_id":state.controllers[id].team_id,
-			"defeated":not _has_headquarters(state,id)})
+		public_players.append({"player_id":id,"player_name":entry.player_name,"faction_id":entry.faction_id,
+			"team_id":state.controllers[id].team_id,"player_color":entry.ownership_color,
+			"connected":entry.connected,"defeated":entry.eliminated})
 	var result:={
 		"protocol_version":NetworkProtocol.NETWORK_PROTOCOL_VERSION,
 		"schema_version":NetworkProtocol.SNAPSHOT_SCHEMA_VERSION,
@@ -19,7 +20,8 @@ static func encode(state: GameState,controller_id: int,sync_revision: int,events
 		"recipient_player_id":controller_id,
 		"recipient_team_id":controller.team_id if controller!=null else controller_id,
 		"turn":{"active_player":state.active_player,"round_number":state.round_number,"serial":state.turn_state.serial,
-			"neutral_phase":state.turn_state.neutral_phase,"winner_id":state.winner_id},
+			"neutral_phase":state.turn_state.neutral_phase,"phase":state.turn_state.phase,"winner_id":state.winner_id,
+			"match_duration_seconds":state.match_duration_seconds()},
 		"players":public_players,
 		"own_player":_player_snapshot(player),
 		"visible_cells":Array(observation.visible_cells),
@@ -34,7 +36,8 @@ static func encode(state: GameState,controller_id: int,sync_revision: int,events
 		"owned_entities":_owned_entity_snapshots(state,controller_id),
 		"owned_faction_state":_owned_faction_state(state,controller_id),
 		"visible_world_state":_visible_world_state(state,observation,controller_id),
-		"events":events.duplicate(true),
+		"combat_planning":state.combat_planning.snapshot_for(controller_id),
+		"events":state.public_events.duplicate(true) if events.is_empty() else events.duplicate(true),
 	}
 	return result
 
@@ -83,7 +86,8 @@ static func _owned_entity_snapshots(state: GameState,controller_id: int) -> Arra
 		if unit.controller_id!=controller_id: continue
 		result.append({"id":unit.id,"kind":"unit","definition_id":unit.definition_id,"controller_id":controller_id,
 			"cell_id":unit.cell_id,"hp":unit.hp,"max_hp":unit.max_hp,"movement":unit.movement,"moved":unit.moved,
-			"attacked":unit.attacked,"ready_next_turn":unit.ready_next_turn,"deployed":unit.deployed,
+			"attacked":unit.attacked,"ready_next_turn":unit.ready_next_turn,"upkeep_paid":unit.upkeep_paid,"deployed":unit.deployed,
+			"counter_cooldown_remaining":unit.counter_cooldown_remaining,
 			"spider_state":unit.spider_state.snapshot() if unit.spider_state!=null else {},
 			"development":unit.development.snapshot() if unit.development!=null else {},
 			"active_disease":unit.active_disease.snapshot() if unit.active_disease!=null else {}})
@@ -107,7 +111,11 @@ static func _owned_faction_state(state: GameState,controller_id: int) -> Diction
 	for id: int in _sorted_int_keys(state.baumeister.bridges):
 		var bridge: BridgeState=state.baumeister.bridges[id]
 		if bridge.controller_id==controller_id: bridges.append(bridge.snapshot())
-	return {"road_cells":roads,"districts":districts,"bridges":bridges}
+	var larvae: Array[Dictionary]=[]
+	for id: int in _sorted_int_keys(state.living_migration.larvae):
+		var larva: LarvaState=state.living_migration.larvae[id]
+		if larva.owner==controller_id: larvae.append(larva.snapshot())
+	return {"road_cells":roads,"larvae":larvae,"districts":districts,"bridges":bridges}
 
 static func _visible_world_state(state: GameState,observation: TeamObservation,controller_id: int) -> Dictionary:
 	var corpses: Array[Dictionary]=[]
@@ -119,6 +127,12 @@ static func _visible_world_state(state: GameState,observation: TeamObservation,c
 	for cell_id: int in _sorted_int_keys(state.living_migration.terrain):
 		if observation.is_visible(cell_id): terrain.append({"cell_id":cell_id,"state":state.living_migration.terrain[cell_id].snapshot()})
 	var roads: Array[Dictionary]=[]
+	var larvae: Array[Dictionary]=[]
+	for id: int in _sorted_int_keys(state.living_migration.larvae):
+		var larva: LarvaState=state.living_migration.larvae[id]
+		if larva.owner==controller_id: larvae.append(larva.snapshot())
+		elif observation.is_visible(larva.cell_id): larvae.append({"id":larva.id,"owner":larva.owner,"source_species":larva.source_species,
+			"cell_id":larva.cell_id,"created_round":larva.created_round,"maturation_round":larva.maturation_round,"ready_to_emerge":larva.ready_to_emerge})
 	for owner_id: int in _sorted_int_keys(state.living_migration.roads):
 		var cells: Array[int]=[]
 		for cell_id: int in state.living_migration.road_cells(owner_id):
@@ -138,7 +152,7 @@ static func _visible_world_state(state: GameState,observation: TeamObservation,c
 			if observation.is_visible(cell_id): visible_path.append(cell_id)
 		if not visible_path.is_empty(): bridges.append({"id":bridge.id,"controller_id":bridge.controller_id,
 			"visible_path":visible_path,"completed":bridge.completed,"operational":bridge.operational,"hp":bridge.hp,"max_hp":bridge.max_hp})
-	return {"corpses":corpses,"terrain":terrain,"roads":roads,"districts":districts,"bridges":bridges}
+	return {"corpses":corpses,"terrain":terrain,"roads":roads,"larvae":larvae,"districts":districts,"bridges":bridges}
 
 static func _dictionary_values(values: Dictionary) -> Array[Dictionary]:
 	var result: Array[Dictionary]=[]

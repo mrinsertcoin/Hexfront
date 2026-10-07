@@ -6,5 +6,5 @@ id = "lm_ant_adaptation"
 display_name = "Ant Adaptation (Provisional)"
 research_cost = 5
 prerequisite_ids = PackedStringArray("lm_symbiotic_foundations")
-unlock_unit_ids = PackedStringArray("fighter_ant", "fire_ant", "ant_queen")
+unlock_unit_ids = PackedStringArray("fire_ant")
 unlock_tags = PackedStringArray("ant_branch_improvement")

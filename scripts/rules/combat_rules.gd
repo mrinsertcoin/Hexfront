@@ -42,7 +42,9 @@ func preview_attack(actor: int,attacker_id: int,target_id: int) -> RuleResult:
 	if result.killed:
 		result.reason+=" %s eliminated." % (target.unit_type if target is GameState.Unit else target.structure_type)
 		if _is_headquarters(target) and not _has_other_headquarters(target.controller_id,target.id):
-			result.winner_id=actor; result.reason+=" Player %d wins!" % actor
+			var survivors:=state.alive_player_ids()
+			survivors.erase(target.controller_id)
+			if survivors.size()==1: result.winner_id=survivors[0]
 	return result
 
 func attack_targets(actor: int,attacker_id: int) -> Array[int]:
@@ -69,7 +71,11 @@ func try_attack(actor: int,attacker_id: int,target_id: int) -> RuleResult:
 	if result.killed:
 		if target is GameState.Unit: state.remove_unit(target_id)
 		else: state.remove_structure(target_id)
-	state.winner_id=result.winner_id
+	if state.players.has(target.controller_id):
+		var eliminated:=state.evaluate_player_survival(target.controller_id,"Last survival headquarters destroyed")
+		if eliminated: result.reason+=" Player %d has been eliminated." % target.controller_id
+	result.winner_id=state.winner_id
+	if result.winner_id!=0: result.reason+=" Player %d wins!" % result.winner_id
 	return result
 
 func _is_headquarters(entity: RefCounted) -> bool:

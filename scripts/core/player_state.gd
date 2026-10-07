@@ -4,11 +4,18 @@ extends RefCounted
 var player_id: int
 var controller_id: int
 var faction_id: String
+var player_name: String
+var ownership_color: String
+var connected: bool=true
+var eliminated: bool=false
+var elimination_round: int=0
 var resources: Dictionary[String,int]={}
 var research:=ResearchState.new()
 
-func _init(id: int=0,controller: int=0,faction: String="") -> void:
+func _init(id: int=0,controller: int=0,faction: String="",display_name: String="",color_hex: String="") -> void:
 	player_id=id; controller_id=controller; faction_id=faction
+	player_name=display_name if not display_name.is_empty() else "Player %d" % id
+	ownership_color=color_hex if color_hex.is_valid_html_color() else ""
 
 func resource_amount(resource_id: String) -> int:
 	return resources.get(resource_id,0)

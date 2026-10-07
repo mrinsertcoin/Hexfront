@@ -5,6 +5,7 @@ script = ExtResource("1")
 id = "hospital"
 display_name = "Hospital"
 costs = {"materials": 4, "energy": 1}
+upkeep = {"energy": 1}
 construction_turns = 2
 required_unlock_tag = "advanced_districts"
 tags = PackedStringArray("support", "heals_biological")

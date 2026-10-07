@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="TechnologyDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/technology_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "bm_logistics_grid"
+display_name = "Logistics Grid"
+description = "Reduces each bridge edge's Materials cost by one."
+research_cost = 5
+prerequisite_ids = PackedStringArray("bm_industrial_foundations")
+unlock_tags = PackedStringArray("efficient_bridges")

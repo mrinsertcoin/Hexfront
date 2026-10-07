@@ -27,6 +27,7 @@ func setup(animated: bool = false, level: int = 3) -> void:
 	board.set_process(false)
 	await process_frame
 	await process_frame
+	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.combat_planning_enabled=false; board._refresh_display()
 
 func _screen(cell: int, focus: bool = true) -> Vector2:
 	if focus:
@@ -106,7 +107,7 @@ func _run() -> void:
 	check(board.selected == selected and not board.game_state.units[1].moved, "HUD consumes clicks without actions")
 	board.navigation.distance = board.navigation.max_distance()
 	board._update_camera_transform(0)
-	click(Vector2(30, 600))
+	click(Vector2(850, 350))
 	check(board.selected == board.NONE, "Background clears selection")
 	await finish("Hotseat globe")
 

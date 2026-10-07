@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="TechnologyDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/technology_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "bm_district_specialization"
+display_name = "District Specialization"
+description = "Maintained production districts generate one additional resource."
+research_cost = 6
+prerequisite_ids = PackedStringArray("bm_industrial_foundations", "bm_civic_services")
+unlock_tags = PackedStringArray("district_specialization")

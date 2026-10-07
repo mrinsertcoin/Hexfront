@@ -214,17 +214,10 @@ func _enemy_headquarters(state: GameState,observation: TeamObservation,player_id
 
 func _living_migration_action(state: GameState,rules: GameRules,player_id: int) -> Dictionary:
 	var spiders: Array[GameState.Unit]=[]
-	var workers: Array[GameState.Unit]=[]
 	for unit: GameState.Unit in state.units.values():
 		if unit.controller_id!=player_id: continue
 		if unit.spider_state!=null: spiders.append(unit)
-		if "road_builder" in state.registry.unit(unit.definition_id).tags: workers.append(unit)
 	spiders.sort_custom(func(a: GameState.Unit,b: GameState.Unit)->bool: return a.id<b.id)
-	workers.sort_custom(func(a: GameState.Unit,b: GameState.Unit)->bool: return a.id<b.id)
-	for worker: GameState.Unit in workers:
-		if worker.road_segments_built_this_turn==0:
-			var cells:=rules.living_migration_rules.valid_road_extensions(player_id,worker.id)
-			if not cells.is_empty(): return {"type":"lm_road","worker":worker.id,"path":[cells[0]]}
 	for spider: GameState.Unit in spiders:
 		for index in range(spider.spider_state.nursery_jobs.size()):
 			var job: BiologicalProductionState=spider.spider_state.nursery_jobs[index]
@@ -240,7 +233,7 @@ func _living_migration_action(state: GameState,rules: GameRules,player_id: int) 
 	var player:=state.players[player_id]
 	if player.research.current_technology_id.is_empty():
 		var technologies:=rules.available_technologies(player_id)
-		if not technologies.is_empty(): return {"type":"research","technology":technologies[0]}
+		if not technologies.is_empty(): return {"type":"research","technology":_preferred_technology(state,player_id,technologies)}
 	for spider: GameState.Unit in spiders:
 		if spider.spider_state.building_count("research_building")==0 and spider.spider_state.construction==null and not spider.moved:
 			var config:=rules.living_migration_rules.config_for(player_id)
@@ -274,7 +267,7 @@ func _baumeister_action(state: GameState,rules: GameRules,player_id: int) -> Dic
 		for pillar: GameState.Structure in pillars:
 			if (pillar.hp<pillar.max_hp or pillar.pillar_state.integrity<pillar.pillar_state.max_integrity) and state.grid.distance(engineer.cell_id,pillar.cell_id)<=1:
 				return {"type":"bm_repair_pillar","engineer":engineer.id,"pillar":pillar.id}
-	var priorities:=PackedStringArray(["mine","greenhouse","civic_monument","barracks","power_plant","workshop","hospital"])
+	var priorities:=PackedStringArray(["power_plant","mine","greenhouse","civic_monument","barracks","workshop","hospital"])
 	for district_id: String in priorities:
 		var already_owned:=false
 		for existing: DistrictState in state.baumeister.districts.values():
@@ -287,7 +280,7 @@ func _baumeister_action(state: GameState,rules: GameRules,player_id: int) -> Dic
 	var player:=state.players[player_id]
 	if player.research.current_technology_id.is_empty():
 		var technologies:=rules.available_technologies(player_id)
-		if not technologies.is_empty(): return {"type":"research","technology":technologies[0]}
+		if not technologies.is_empty(): return {"type":"research","technology":_preferred_technology(state,player_id,technologies)}
 	if state.baumeister.districts.size()>=3:
 		for engineer: GameState.Unit in engineers:
 			if engineer.moved or engineer.attacked: continue
@@ -300,3 +293,9 @@ func _baumeister_action(state: GameState,rules: GameRules,player_id: int) -> Dic
 				if enemy.kind=="unit" and state.relationships.is_hostile(player_id,enemy.controller_id) and state.grid.distance(unit.cell_id,enemy.cell_id)<=state.registry.unit(unit.definition_id).deployed_attack_range:
 					return {"type":"bm_deploy","unit":unit.id}
 	return {}
+
+func _preferred_technology(state: GameState,player_id: int,available: PackedStringArray) -> String:
+	var faction:=state.registry.faction(state.players[player_id].faction_id)
+	for technology_id: String in faction.technology_ids:
+		if technology_id in available: return technology_id
+	return available[0]

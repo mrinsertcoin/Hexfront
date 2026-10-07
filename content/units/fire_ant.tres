@@ -11,5 +11,6 @@ attack_damage = 2
 costs = {"food": 4, "synapse": 3}
 upkeep = {"food": 2}
 corpse_food_value = 3
+squad_size = 2
 tags = PackedStringArray("ant", "morale_immune", "disease_immune")
 visual_id = "fire_ant"
