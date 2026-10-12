@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WorldSiteDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/world_site_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "village"
+display_name = "Village"
+description = "A small independent settlement. Preserve it for recurring trade, or destroy it for one immediate cache."
+tags = PackedStringArray("settlement", "village", "guarded", "destructible")
+blocks_movement = true
+selectable = true
+interactable = true
+category = "village"
+interaction_type = "trade"
+trade_recipe_ids = PackedStringArray("food_for_silk", "materials_for_energy")
+guardian_group_id = "village_defenders"
+max_hp = 24
+neutral_allegiance_id = "free_villages"
+loot_resources = {"food": 8, "silk": 4, "materials": 8, "energy": 4}
+loot_research_progress = 3
+visual_id = "village"
+visual_scale = 1.0

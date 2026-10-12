@@ -12,6 +12,8 @@ var fingerprint: String
 var _vertices: PackedVector3Array = []
 var _faces: Array[Vector3i] = []
 var _distance_cache: Dictionary[int, PackedInt32Array] = {}
+var _spatial_nodes: Array[Vector3i] = [] # cell, left, right; balanced k-d tree
+var _spatial_root: int = -1
 
 class Traversal extends RefCounted:
 	var parents: Dictionary[int, int] = {}
@@ -40,11 +42,25 @@ func get_neighbors(id: int) -> Array[int]:
 func are_neighbors(a: int, b: int) -> bool:
 	return contains(a) and cells[a].neighbor_ids.has(b)
 
+func neighbor_across_edge(cell_id: int,edge_index: int) -> int:
+	if not contains(cell_id): return -1
+	var cell:=cells[cell_id]
+	if edge_index<0 or edge_index>=cell.polygon_vertices.size(): return -1
+	var a: Vector3=cell.polygon_vertices[edge_index].normalized()
+	var b: Vector3=cell.polygon_vertices[(edge_index+1)%cell.polygon_vertices.size()].normalized()
+	for neighbor_id: int in cell.neighbor_ids:
+		var shared:=0
+		for vertex: Vector3 in cells[neighbor_id].polygon_vertices:
+			var direction:=vertex.normalized()
+			if direction.is_equal_approx(a) or direction.is_equal_approx(b): shared+=1
+		if shared==2: return neighbor_id
+	return -1
+
 func sample_position(direction: Vector3, height_offset: float = 0.0) -> Vector3:
 	# Single continuous sampling boundary for future direction-based elevation.
 	return direction.normalized() * (planet_radius + height_offset)
 
-func breadth_first(start: int, limit: int = -1, blocked: Dictionary = {}) -> Traversal:
+func breadth_first(start: int, limit: int = -1, blocked: Dictionary = {},blocked_edges: Dictionary = {}) -> Traversal:
 	var result := Traversal.new()
 	if not contains(start):
 		return result
@@ -58,6 +74,7 @@ func breadth_first(start: int, limit: int = -1, blocked: Dictionary = {}) -> Tra
 		if limit >= 0 and result.costs[current] >= limit:
 			continue
 		for neighbor: int in get_neighbors(current):
+			if blocked_edges.has(Vector2i(current,neighbor)): continue
 			if result.parents.has(neighbor) or blocked.has(neighbor):
 				continue
 			result.parents[neighbor] = current
@@ -109,14 +126,7 @@ func find_cell(direction: Vector3) -> int:
 	if not direction.is_finite() or direction.length_squared() < 0.000001:
 		return -1
 	var point: Vector3 = direction.normalized()
-	var best: int = 0
-	var score: float = -INF
-	# Isolated lookup, profiled separately. A spatial index can replace this scan.
-	for cell: PlanetCell in cells:
-		var dot: float = point.dot(cell.center_direction)
-		if dot > score:
-			score = dot
-			best = cell.id
+	var best: int = int(_nearest_cell(_spatial_root,point,0,Vector2(-INF,0)).y)
 	# Centroid duals are not exact Voronoi cells: verify actual polygon ownership.
 	if cells[best].contains_direction(point):
 		return best
@@ -127,6 +137,31 @@ func find_cell(direction: Vector3) -> int:
 		if cell.contains_direction(point):
 			return cell.id
 	return -1
+
+func _build_spatial_index(ids: Array[int],axis: int=0) -> int:
+	if ids.is_empty(): return -1
+	ids.sort_custom(func(a: int,b: int) -> bool:
+		var x: float=cells[a].up[axis]; var y: float=cells[b].up[axis]
+		return x<y or (x==y and a<b))
+	var middle:=ids.size()/2
+	var node_index:=_spatial_nodes.size(); _spatial_nodes.append(Vector3i(ids[middle],-1,-1))
+	var left:=_build_spatial_index(ids.slice(0,middle),(axis+1)%3)
+	var right:=_build_spatial_index(ids.slice(middle+1),(axis+1)%3)
+	_spatial_nodes[node_index]=Vector3i(ids[middle],left,right)
+	return node_index
+
+func _nearest_cell(index: int,point: Vector3,axis: int,best: Vector2) -> Vector2:
+	if index<0: return best
+	var node:=_spatial_nodes[index]; var direction:=cells[node.x].up
+	var score:=point.dot(direction)
+	if score>best.x or (score==best.x and node.x<int(best.y)): best=Vector2(score,node.x)
+	var delta: float=point[axis]-direction[axis]
+	best=_nearest_cell(node.y if delta<0 else node.z,point,(axis+1)%3,best)
+	# Unit-sphere dot product equals 1-distance²/2. The small conservative
+	# margin accommodates float normalization and preserves numeric ID ties.
+	if delta*delta<=maxf(0.0,2.0-2.0*best.x)+0.000002:
+		best=_nearest_cell(node.z if delta<0 else node.y,point,(axis+1)%3,best)
+	return best
 
 func _midpoint(a: int, b: int, cache: Dictionary[Vector2i, int]) -> int:
 	var key := Vector2i(mini(a, b), maxi(a, b))
@@ -190,3 +225,6 @@ func _generate() -> void:
 		var v: Vector3 = cell.center_direction
 		serialized.append("%d:%d,%d,%d:%s" % [cell.id, roundi(v.x * 1000000), roundi(v.y * 1000000), roundi(v.z * 1000000), str(cell.neighbor_ids)])
 	fingerprint = "|".join(serialized).sha256_text()
+	var spatial_ids: Array[int]=[]
+	for id in range(cells.size()): spatial_ids.append(id)
+	_spatial_root=_build_spatial_index(spatial_ids)

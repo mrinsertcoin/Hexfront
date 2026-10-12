@@ -45,6 +45,7 @@ var lobby_match_config: Dictionary={
 	"planet_size":MatchConfig.PlanetSize.SMALL,
 	"world_seed":48293617,
 	"world_population_preset":WorldPopulationConfig.STANDARD,
+	"villages_per_player":2,
 }
 
 func _ready() -> void:
@@ -113,7 +114,7 @@ func shutdown(reason: String="Disconnected") -> void:
 	peer=null; role=Role.OFFLINE; local_player_id=0; match_has_started=false
 	lobby_capacity=NetworkProtocol.MAX_PLAYERS
 	lobby_match_config={"planet_size":MatchConfig.PlanetSize.SMALL,"world_seed":48293617,
-		"world_population_preset":WorldPopulationConfig.STANDARD}
+		"world_population_preset":WorldPopulationConfig.STANDARD,"villages_per_player":2}
 	peer_to_player.clear(); player_to_peer.clear(); lobby_players.clear(); loaded_players.clear(); client_loaded_sent=false; awaiting_resynchronization=false
 	command_dispatcher=null; authoritative_state=null; authoritative_rules=null
 	latest_observation.clear(); sync_revision=0; authoritative_sync_revision=0; next_client_sequence=1; last_command_result.clear()
@@ -316,7 +317,9 @@ func _rpc_match_interrupted(player_id: int,player_name: String) -> void:
 
 @rpc("authority","call_remote","reliable")
 func _rpc_match_resumed(message: String) -> void:
-	if role==Role.CLIENT: _set_status(Status.ACTIVE,message)
+	if role==Role.CLIENT:
+		_set_status(Status.ACTIVE,message)
+		if not latest_observation.is_empty(): observation_received.emit(latest_observation.duplicate(true))
 
 func _server_process_command(peer_id: int,command: Dictionary) -> void:
 	if role!=Role.HOST or status!=Status.ACTIVE or command_dispatcher==null: return
@@ -346,10 +349,12 @@ func _receive_observation(snapshot: Dictionary) -> void:
 		resynchronization_requested.emit(sync_revision+1,incoming)
 		request_resynchronization(); return
 	sync_revision=incoming; awaiting_resynchronization=false; latest_observation=snapshot.duplicate(true); loading_deadline_ms=0
-	if role==Role.CLIENT and status==Status.LOADING: _set_status(Status.ACTIVE,"Connected")
-	observation_received.emit(latest_observation.duplicate(true))
 	if role==Role.CLIENT and not client_loaded_sent:
 		client_loaded_sent=true; _rpc_client_loaded.rpc_id(1,incoming)
+	# A snapshot acknowledges this client's load, but does not make the client
+	# actionable yet: other players may still be loading. The host broadcasts
+	# the readiness barrier only after every acknowledgement has arrived.
+	observation_received.emit(latest_observation.duplicate(true))
 
 func _on_connected_to_server() -> void:
 	if role!=Role.CLIENT: return
@@ -374,10 +379,19 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	if command_dispatcher!=null: command_dispatcher.unregister_peer(peer_id)
 	if match_has_started:
 		record.connected=false; record.ready=false; lobby_players[player_id]=record
-		if authoritative_state!=null: authoritative_state.set_player_connected(player_id,false)
-		get_tree().paused=true
-		_set_status(Status.INTERRUPTED,"%s disconnected. Match paused." % String(record.get("player_name","Player")))
-		_rpc_match_interrupted.rpc(player_id,String(record.get("player_name","Player")))
+		if authoritative_state!=null:
+			var was_active:=authoritative_state.active_player==player_id
+			authoritative_state.set_player_connected(player_id,false)
+			authoritative_state.eliminate_player(player_id,"Disconnected")
+			if authoritative_state.turn_state.phase==TurnState.COMBAT_RESOLUTION and authoritative_rules!=null: authoritative_rules.resolve_combat_phase()
+			elif was_active and authoritative_rules!=null and authoritative_state.turn_state.phase==TurnState.MANAGEMENT:
+				authoritative_rules.living_migration_rules.start_turn(authoritative_state.active_player)
+				authoritative_rules.baumeister_rules.start_turn(authoritative_state.active_player)
+		record.eliminated=true; lobby_players[player_id]=record
+		get_tree().paused=false
+		_set_status(Status.ACTIVE,"%s disconnected and was eliminated." % String(record.get("player_name","Player")))
+		authoritative_sync_revision+=1; _publish_observations(); _broadcast_lobby()
+		_rpc_match_resumed.rpc("%s disconnected and was eliminated." % String(record.get("player_name","Player")))
 		participant_disconnected.emit(player_id,String(record.get("player_name","Player")))
 	else:
 		lobby_players.erase(player_id)
@@ -397,6 +411,7 @@ func _finish_loading_if_ready() -> void:
 	for player_id: int in player_to_peer:
 		if not bool(loaded_players.get(player_id,false)): return
 	loading_deadline_ms=0; _set_status(Status.ACTIVE,"Connected")
+	_rpc_match_resumed.rpc("Connected")
 
 func _update_player(player_id: int,faction_id: String,ready: bool) -> void:
 	if not lobby_players.has(player_id): return
@@ -441,12 +456,16 @@ func _lobby_configuration_error(configuration: Dictionary) -> String:
 	if size not in MatchConfig.normal_planet_sizes(): return "Choose Small or Medium planet size."
 	if String(configuration.get("world_population_preset",WorldPopulationConfig.STANDARD)) not in WorldPopulationConfig.PRESETS:
 		return "Choose a valid world population preset."
+	if int(configuration.get("villages_per_player",2))<0 or int(configuration.get("villages_per_player",2))>4:
+		return "Choose zero to four villages per player."
+	if String(configuration.get("cliff_generation","Rare")) not in TerracedTerrain.CLIFF_PRESETS: return "Choose a valid cliff generation preset."
 	return ""
 
 func _sanitized_lobby_configuration(configuration: Dictionary) -> Dictionary:
 	return {"planet_size":int(configuration.get("planet_size",MatchConfig.PlanetSize.SMALL)),
 		"world_seed":int(configuration.get("world_seed",48293617)),
-		"world_population_preset":String(configuration.get("world_population_preset",WorldPopulationConfig.STANDARD))}
+		"world_population_preset":String(configuration.get("world_population_preset",WorldPopulationConfig.STANDARD)),
+		"villages_per_player":clampi(int(configuration.get("villages_per_player",2)),0,4),"cliff_generation":String(configuration.get("cliff_generation","Rare"))}
 
 func _set_status(value: Status,message: String) -> void:
 	status=value; status_message=message; status_changed.emit(status,message)

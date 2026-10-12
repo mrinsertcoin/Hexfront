@@ -32,7 +32,7 @@ func test_rosters_and_research() -> void:
 	var living:=registry.faction("living_migration"); var builder:=registry.faction("baumeister")
 	check(living.unit_roster_ids.size()==15 and _unique_count(living.unit_roster_ids)==15,"Living Migration retains 15 unique playable units")
 	check(builder.unit_roster_ids.size()==8 and _unique_count(builder.unit_roster_ids)==8,"Baumeister retains 8 unique playable units")
-	check(living.technology_ids.size()==12,"Living Migration has 12 concise technologies")
+	check(living.technology_ids.size()==15,"Living Migration has 15 rooted technologies")
 	check(builder.technology_ids.size()==10,"Baumeister has 10 concise technologies")
 	var state:=make_state(); var rules:=GameRules.new(state)
 	check(rules.research_rules.is_unit_unlocked(1,"fighter_ant"),"Living Migration has a viable starting military recruit")

@@ -14,6 +14,9 @@ func check(ok: bool, message: String) -> void:
 func setup(animated: bool = false, level: int = 3) -> void:
 	root.size = Vector2i(1152, 648)
 	board = Main.instantiate() as PlanetBoard
+	# Legacy continuous terrain remains an explicit reference fixture. Normal
+	# MatchConfig and direct scene runs use the new terrace generator.
+	board.generation_config=PlanetGenerationConfig.new()
 	board.animate_movement = animated
 	board.subdivision_level = level
 	board.planet_radius = 12.0 * pow(2.0, level - 3)
@@ -27,7 +30,7 @@ func setup(animated: bool = false, level: int = 3) -> void:
 	board.set_process(false)
 	await process_frame
 	await process_frame
-	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.combat_planning_enabled=false; board._refresh_display()
+	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.simultaneous_combat_enabled=false; board._refresh_display()
 
 func _screen(cell: int, focus: bool = true) -> Vector2:
 	if focus:
@@ -83,7 +86,7 @@ func _run() -> void:
 			check(board.preview_path == board.rules.path_to(player, id, destination), "Hover previews accepted path")
 			click(_screen(destination), MOUSE_BUTTON_RIGHT)
 			check(board.game_state.units[id].cell_id == destination and board.game_state.units[id].moved, "Mouse movement commits")
-			check(board.unit_views[id].position.is_equal_approx(board.terrain_surface.sample_position(board.grid.get_cell(destination).up, board.SURFACE_OFFSET)), "View follows logical cell")
+			check(board.unit_views[id].position.is_equal_approx(board.terrain_surface.ground_position(board.grid.get_cell(destination).up, board.SURFACE_OFFSET)), "View follows logical cell on the rendered ground")
 			check(board.reachable_tiles.is_empty() and board.unit_label.text.contains("Moved"), "Spent unit has no highlights")
 			click(_screen(board.grid.get_neighbors(destination)[0]), MOUSE_BUTTON_RIGHT)
 			check(board.game_state.units[id].cell_id == destination, "Second move rejected")
@@ -103,7 +106,7 @@ func _run() -> void:
 	var selected: int = board.selected
 	click(board.hud_panel.get_global_rect().position + Vector2(10, 10))
 	click(board.hud_panel.get_global_rect().position + Vector2(10, 10), MOUSE_BUTTON_RIGHT)
-	click(board.coordinate_label.get_global_rect().get_center())
+	if board.coordinate_label.visible: click(board.coordinate_label.get_global_rect().get_center())
 	check(board.selected == selected and not board.game_state.units[1].moved, "HUD consumes clicks without actions")
 	board.navigation.distance = board.navigation.max_distance()
 	board._update_camera_transform(0)

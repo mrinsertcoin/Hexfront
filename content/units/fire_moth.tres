@@ -11,5 +11,5 @@ attack_damage = 4
 costs = {"food": 6, "synapse": 3}
 upkeep = {"food": 3}
 corpse_food_value = 4
-tags = PackedStringArray("metamorphic", "morale_immune", "disease_immune")
+tags = PackedStringArray("metamorphic", "morale_immune", "disease_immune", "flying")
 visual_id = "fire_moth"

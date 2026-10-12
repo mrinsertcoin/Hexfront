@@ -47,7 +47,21 @@ func parents(unit: GameState.Unit) -> Dictionary[int,int]:
 		blocked.erase(unit.cell_id)
 	if network_rules!=null and network_rules.is_baumeister(unit.controller_id):
 		return _weighted_parents(unit,blocked)
-	return state.grid.breadth_first(unit.cell_id,UnitStatResolver.movement(unit,state.registry),blocked).parents
+	if state.village_guard_home(unit)>=0: return _guard_parents(unit,blocked)
+	var cliff_edges: Dictionary=state.terrain.blocked_edges if state.terrain!=null and "flying" not in movement_tags else {}
+	return state.grid.breadth_first(unit.cell_id,UnitStatResolver.movement(unit,state.registry),blocked,cliff_edges).parents
+
+func _guard_parents(unit: GameState.Unit,blocked: Dictionary) -> Dictionary[int,int]:
+	var result: Dictionary[int,int]={unit.cell_id:unit.cell_id}
+	var costs: Dictionary[int,int]={unit.cell_id:0}; var queue: Array[int]=[unit.cell_id]; var cursor:=0
+	var budget:=UnitStatResolver.movement(unit,state.registry)
+	while cursor<queue.size():
+		var current:=queue[cursor]; cursor+=1
+		if costs[current]>=budget: continue
+		for neighbor: int in state.grid.get_neighbors(current):
+			if result.has(neighbor) or blocked.has(neighbor) or not state.terrain_edge_allowed(unit,current,neighbor): continue
+			result[neighbor]=current; costs[neighbor]=costs[current]+1; queue.append(neighbor)
+	return result
 
 func _weighted_parents(unit: GameState.Unit,blocked: Dictionary) -> Dictionary[int,int]:
 	var budget:=network_rules.movement_budget(unit)
@@ -58,6 +72,7 @@ func _weighted_parents(unit: GameState.Unit,blocked: Dictionary) -> Dictionary[i
 			return distances[a]<distances[b] or (distances[a]==distances[b] and a<b))
 		var current: int=open.pop_front(); var neighbors: Array[int]=state.grid.get_neighbors(current); neighbors.sort()
 		for neighbor: int in neighbors:
+			if not state.terrain_edge_allowed(unit,current,neighbor): continue
 			if blocked.has(neighbor): continue
 			var candidate: int=distances[current]+network_rules.movement_edge_cost(unit,current,neighbor)
 			if candidate>budget: continue
@@ -89,6 +104,7 @@ func try_move(actor: int,unit_id: int,destination: int) -> RuleResult:
 	var path:=path_to(actor,unit_id,destination)
 	if path.is_empty(): return RuleResult.new(false,"No open path within this unit's movement allowance.")
 	for index in range(1,path.size()):
+		if not state.terrain_edge_allowed(unit,path[index-1],path[index]): return RuleResult.new(false,"A cliff blocks this ground route.")
 		if state.is_cell_blocked(path[index],unit.id):
 			return RuleResult.new(false,"Movement is blocked by an obstruction discovered along the route.")
 	unit.cell_id=destination; unit.moved=true

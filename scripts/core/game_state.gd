@@ -29,6 +29,8 @@ class Unit extends RefCounted:
 	var neutral_home_cell: int=-1
 	var neutral_leash_distance: int=0
 	var neutral_awareness_range: int=0
+	var home_site_id: int=-1
+	var neutral_allegiance_id: String=""
 	var _movement_override: int=-1
 	var _registry: ContentRegistry
 
@@ -102,12 +104,13 @@ var players: Dictionary[int,PlayerState]={}
 var controllers: Dictionary[int,ControllerState]={}
 var relationships:=RelationshipState.new()
 var living_migration:=LivingMigrationState.new()
-var combat_planning:=CombatPlanningState.new()
+var combat_orders:=CombatOrderState.new()
 var baumeister:=BaumeisterState.new()
 var turn_state:=TurnState.new()
 var next_id: int=200
 var next_site_id: int=10000
 var last_started_turn: int=-1
+var started_controller_rounds: Dictionary[int,int]={}
 var winner_id: int=0
 var grid: PlanetGrid
 var registry: ContentRegistry
@@ -119,6 +122,26 @@ var start_diagnostics: Dictionary[int,Dictionary]={}
 var public_events: Array[Dictionary]=[]
 var match_started_msec: int=0
 var water_cells: Dictionary[int,bool]={}
+var terrain: TerracedTerrain
+var _village_leash_cells: Dictionary={}
+
+func village_guard_home(unit: Unit) -> int:
+	if "village_guard" not in registry.unit(unit.definition_id).tags: return -1
+	var home: WorldSiteState=world_sites.get(unit.home_site_id) as WorldSiteState
+	return home.cell_id if home!=null and home.definition_id=="village" else unit.neutral_home_cell
+
+func village_guard_cells(unit: Unit) -> Dictionary:
+	var home:=village_guard_home(unit)
+	if home<0: return {}
+	if not _village_leash_cells.has(home):
+		var allowed:={}
+		for cell_id: int in grid.get_cells_within_distance(home,5): allowed[cell_id]=true
+		_village_leash_cells[home]=allowed
+	return _village_leash_cells[home]
+
+func terrain_edge_allowed(unit: Unit,from_cell: int,to_cell: int) -> bool:
+	if village_guard_home(unit)>=0 and not village_guard_cells(unit).has(to_cell): return false
+	return terrain==null or terrain.can_cross(from_cell,to_cell,"flying" in registry.unit(unit.definition_id).tags)
 
 var active_player: int:
 	get: return turn_state.active_controller_id
@@ -142,11 +165,12 @@ func _init(topology: PlanetGrid=null,match_setup: Dictionary={},content: Content
 	reset_match()
 
 func reset_match() -> void:
+	_village_leash_cells.clear()
 	units.clear(); structures.clear(); world_sites.clear(); players.clear(); controllers.clear()
 	living_migration=LivingMigrationState.new()
-	combat_planning=CombatPlanningState.new()
+	combat_orders=CombatOrderState.new()
 	baumeister=BaumeisterState.new()
-	next_id=200; next_site_id=10000; winner_id=0; last_started_turn=-1
+	next_id=200; next_site_id=10000; winner_id=0; last_started_turn=-1; started_controller_rounds.clear()
 	population_fingerprint=""; starting_cells.clear(); start_diagnostics.clear(); public_events.clear()
 	match_started_msec=Time.get_ticks_msec()
 	water_cells.clear()
@@ -176,9 +200,16 @@ func reset_match() -> void:
 		var faction:=registry.faction(faction_ids[index])
 		assert(faction!=null,"Unknown faction: "+faction_ids[index])
 		players[controller_id].resources=faction.starting_resources.duplicate(true)
-	var order: Array[int]=[]
-	for player_id: int in players: order.append(player_id)
-	order.sort(); turn_state.combat_planning_enabled=bool(setup.get("simultaneous_combat",true)); turn_state.reset(order)
+	var order: Array[int]=[]; var human_order: Array[int]=[]; var enemy_order: Array[int]=[]
+	for player_id: int in players:
+		if bool(setup.get("simultaneous_player_turns",false)) and controllers[player_id].kind==ControllerState.HUMAN: human_order.append(player_id)
+		else: enemy_order.append(player_id)
+	human_order.sort(); enemy_order.sort()
+	if bool(setup.get("simultaneous_player_turns",false)): order.assign(enemy_order+human_order)
+	else:
+		for player_id: int in players: order.append(player_id)
+		order.sort()
+	turn_state.simultaneous_combat_enabled=bool(setup.get("simultaneous_combat",true)); turn_state.reset(order,human_order)
 	relationships=RelationshipState.new()
 	for a: int in order:
 		for b: int in order:
@@ -223,7 +254,6 @@ func _initialize_faction_state(order: Array[int]) -> void:
 					if not config.starting_nursery_branch.is_empty():
 						unit.spider_state.nursery_branch=config.starting_nursery_branch
 						unit.spider_state.slots.append(config.starting_nursery_branch)
-					living_migration.add_road(controller_id,unit.cell_id)
 				elif "road_bound" in definition.tags: living_migration.add_road(controller_id,unit.cell_id)
 		elif faction.gameplay_config is BaumeisterConfig:
 			var config:=faction.gameplay_config as BaumeisterConfig
@@ -231,6 +261,12 @@ func _initialize_faction_state(order: Array[int]) -> void:
 				if structure.controller_id==controller_id and "pillar" in registry.structure(structure.definition_id).tags:
 					structure.pillar_state=PillarState.new(config.pillar_max_integrity,true)
 					baumeister.origin_pillars[controller_id]=structure.id
+	_cleanup_spider_roads()
+
+func _cleanup_spider_roads() -> void:
+	for unit: Unit in units.values():
+		if unit.spider_state!=null:
+			living_migration.remove_road(unit.controller_id,unit.cell_id)
 
 func _starting_homes(order: Array[int]) -> Array[int]:
 	var homes: Array[int]=[]
@@ -289,6 +325,62 @@ func entity_at(cell_id: int) -> RefCounted:
 	var unit:=unit_at(cell_id)
 	if unit!=null: return unit
 	return structure_at(cell_id)
+
+func combat_target(target_id: int) -> RefCounted:
+	if units.has(target_id): return units[target_id]
+	if structures.has(target_id): return structures[target_id]
+	return world_sites.get(target_id) as WorldSiteState
+
+func relationship_for_site(player_id: int,site: WorldSiteState) -> RelationshipState.Kind:
+	if site.controller_id>0 and relationships.is_site_hostile(player_id,site.controller_id,site.id): return RelationshipState.Kind.HOSTILE
+	return relationships.between(player_id,site.controller_id) if site.controller_id>0 else RelationshipState.Kind.NEUTRAL
+
+func entities_are_hostile(a: RefCounted,b: RefCounted) -> bool:
+	if a is Unit and a.home_site_id>=0 and players.has(b.controller_id):
+		return relationships.is_site_hostile(b.controller_id,a.controller_id,a.home_site_id)
+	if b is Unit and b.home_site_id>=0 and players.has(a.controller_id):
+		return relationships.is_site_hostile(a.controller_id,b.controller_id,b.home_site_id)
+	if a is WorldSiteState and players.has(b.controller_id): return relationship_for_site(b.controller_id,a)==RelationshipState.Kind.HOSTILE
+	if b is WorldSiteState and players.has(a.controller_id): return relationship_for_site(a.controller_id,b)==RelationshipState.Kind.HOSTILE
+	return relationships.is_hostile(a.controller_id,b.controller_id)
+
+func provoke_village(player_id: int,site_id: int) -> void:
+	if not world_sites.has(site_id): return
+	var site: WorldSiteState=world_sites[site_id]
+	var definition:=registry.world_site(site.definition_id)
+	if definition==null or definition.category!="village": return
+	relationships.set_site_hostile(player_id,site.controller_id,site.id)
+	var hostile: Dictionary=site.runtime_state.get("hostile_players",{})
+	hostile[player_id]=true; site.runtime_state.hostile_players=hostile
+	public_events.append({"kind":"village_hostile","site_id":site.id,"player_id":player_id,"round":round_number})
+
+func provoke_village_for_target(player_id: int,target: RefCounted) -> void:
+	if target is WorldSiteState: provoke_village(player_id,target.id)
+	elif target is Unit and target.home_site_id>=0: provoke_village(player_id,target.home_site_id)
+
+func player_can_attack_target(player_id: int,target: RefCounted) -> bool:
+	if not players.has(player_id) or target==null or target.hp<=0: return false
+	if target is WorldSiteState:
+		var definition:=registry.world_site(target.definition_id)
+		return definition!=null and definition.category=="village" and not target.runtime_state.get("destroyed",false)
+	if not (target is Unit or target is Structure) or target.controller_id==player_id: return false
+	var relationship:=relationships.between(player_id,target.controller_id)
+	return relationship!=RelationshipState.Kind.SELF and relationship!=RelationshipState.Kind.ALLIED
+
+func provoke_attack_target(player_id: int,target: RefCounted) -> void:
+	if target==null or not players.has(player_id): return
+	if target is WorldSiteState or (target is Unit and target.home_site_id>=0):
+		provoke_village_for_target(player_id,target); return
+	if target.controller_id>0 and relationships.between(player_id,target.controller_id)==RelationshipState.Kind.NEUTRAL:
+		relationships.set_relationship(player_id,target.controller_id,RelationshipState.Kind.HOSTILE)
+		public_events.append({"kind":"controller_provoked","controller_id":target.controller_id,"player_id":player_id,"round":round_number})
+
+func destroy_world_site(site_id: int,attacker_id: int=0) -> void:
+	if not world_sites.has(site_id): return
+	var site: WorldSiteState=world_sites[site_id]
+	site.hp=0; site.runtime_state.destroyed=true; site.runtime_state.loot_available=true
+	site.runtime_state.destroyed_by=attacker_id
+	public_events.append({"kind":"site_destroyed","site_id":site.id,"attacker_id":attacker_id,"round":round_number})
 
 func is_cell_blocked(cell_id: int,ignore_entity_id: int=-1) -> bool:
 	var unit:=unit_at(cell_id)
@@ -357,8 +449,10 @@ func add_world_site(definition_id: String,cell_id: int,controller_id: int=0) -> 
 	var definition:=registry.world_site(definition_id)
 	assert(definition!=null,"Unknown world site: "+definition_id)
 	var site:=WorldSiteState.new(allocate_site_id(),definition_id,cell_id,controller_id)
+	site.max_hp=definition.max_hp; site.hp=definition.max_hp
 	site.runtime_state={"remaining_charges":definition.initial_charges,"exhausted":false,
-		"regeneration_remaining":0,"explored":false,"trade_usage":{}}
+		"regeneration_remaining":0,"explored":false,"trade_usage":{},"destroyed":false,
+		"loot_available":false,"loot_claimed":false,"hostile_players":{}}
 	world_sites[site.id]=site
 	return site
 
@@ -380,13 +474,22 @@ func apply_population(result: WorldPopulationResult) -> void:
 			unit.neutral_group_id=record.definition_id; unit.neutral_group_instance_id=group_instance
 			unit.neutral_home_cell=record.cell_id; unit.neutral_leash_distance=record.get("leash_distance",3)
 			unit.neutral_awareness_range=record.get("awareness_range",3)
+			unit.neutral_allegiance_id=String(record.get("neutral_allegiance_id",""))
+			if int(record.get("site_cell_id",-1))>=0:
+				var home_site:=site_at(int(record.site_cell_id)); unit.home_site_id=home_site.id if home_site!=null else -1
+			if "village_guard" in registry.unit(unit.definition_id).tags:
+				unit.neutral_leash_distance=5
+				if world_sites.has(unit.home_site_id): unit.neutral_home_cell=world_sites[unit.home_site_id].cell_id
 			units[entity_id]=unit
 		group_instance+=1
 	turn_state.neutral_phase_enabled=not result.neutral_group_records.is_empty()
+	turn_state.begin_initial_enemy_phase()
+	if turn_state.neutral_phase: prepare_neutral_actions()
 	_calculate_start_diagnostics()
 	refresh_visibility()
 
 func clear_population() -> void:
+	_village_leash_cells.clear()
 	world_sites.clear(); population_fingerprint=""; next_site_id=10000
 	var neutral_ids: Array[int]=[]
 	for unit: Unit in units.values():
@@ -427,6 +530,8 @@ func eliminate_player(controller_id: int,reason: String="Eliminated") -> void:
 	if not players.has(controller_id) or players[controller_id].eliminated: return
 	var player: PlayerState=players[controller_id]
 	player.eliminated=true; player.elimination_round=round_number; turn_state.set_eliminated(controller_id)
+	for unit_id: int in combat_orders.intents.keys().duplicate():
+		if combat_orders.intents[unit_id].controller_id==controller_id: combat_orders.intents.erase(unit_id)
 	var removed_units: Array[int]=[]
 	for unit: Unit in units.values():
 		if unit.controller_id==controller_id: removed_units.append(unit.id)
@@ -478,34 +583,45 @@ func _calculate_start_diagnostics() -> void:
 		start_diagnostics[player_id]={"start_cell":start_cell,"nearest_opponent_distance":nearest,
 			"local_terrain_suitability":suitability,"nearby_site_count":nearby_sites,"nearby_hostile_neutral_strength":hostile_strength}
 
-func start_turn() -> void:
-	if winner_id!=0 or turn_state.phase!=TurnState.MANAGEMENT or last_started_turn==turn_state.serial: return
+func start_turn() -> Array[int]:
+	var started: Array[int]=[]
+	if winner_id!=0 or turn_state.phase!=TurnState.MANAGEMENT: return started
+	var controller_ids: Array[int]=[]
+	if turn_state.simultaneous_player_turns_enabled and turn_state.simultaneous_stage_started: controller_ids=turn_state.simultaneous_player_ids()
+	else: controller_ids.append(active_player)
+	for controller_id: int in controller_ids:
+		if int(started_controller_rounds.get(controller_id,0))==round_number: continue
+		started_controller_rounds[controller_id]=round_number; started.append(controller_id)
+		if players.has(controller_id):
+			var player: PlayerState=players[controller_id]
+			player.add_resources(registry.faction(player.faction_id).turn_resource_income)
+			_process_unit_economy_and_status(controller_id,player)
+		for unit: Unit in units.values():
+			if unit.controller_id==controller_id:
+				unit.moved=false; unit.attacked=false; unit.road_segments_built_this_turn=0; unit.ready_next_turn=false
+		for structure: Structure in structures.values():
+			if structure.controller_id==controller_id: structure.recruit_available=true
+		_process_designations(controller_id)
 	last_started_turn=turn_state.serial
-	var controller_id:=active_player
-	if players.has(controller_id):
-		var player: PlayerState=players[controller_id]
-		player.add_resources(registry.faction(player.faction_id).turn_resource_income)
-		_process_unit_economy_and_status(controller_id,player)
-	for unit: Unit in units.values():
-		var is_active_neutral:=turn_state.neutral_phase and controllers.has(unit.controller_id) and controllers[unit.controller_id].kind==ControllerState.NEUTRAL_AI
-		if unit.controller_id==controller_id or is_active_neutral:
-			unit.moved=false; unit.attacked=false; unit.road_segments_built_this_turn=0; unit.ready_next_turn=false
-	for structure: Structure in structures.values():
-		if structure.controller_id==controller_id: structure.recruit_available=true
-	_process_designations(controller_id)
+	return started
 
-func advance_turn() -> int:
-	turn_state.advance()
+func advance_turn(controller_id: int=-1) -> int:
+	turn_state.advance_controller(active_player if controller_id<0 else controller_id)
 	process_round_boundary()
 	start_turn()
 	refresh_visibility()
 	return active_player
 
 func process_round_boundary() -> void:
-	if turn_state.index==0 and living_migration.last_regrowth_round<turn_state.round_number:
+	if (turn_state.index==0 or (turn_state.simultaneous_player_turns_enabled and turn_state.neutral_phase)) and living_migration.last_regrowth_round<turn_state.round_number:
 		living_migration.last_regrowth_round=turn_state.round_number
 		for terrain_state: TerrainConsumptionState in living_migration.terrain.values(): terrain_state.advance()
 		_process_world_site_regeneration()
+
+func prepare_neutral_actions() -> void:
+	for unit: Unit in units.values():
+		if controllers.has(unit.controller_id) and controllers[unit.controller_id].kind==ControllerState.NEUTRAL_AI:
+			unit.moved=false; unit.attacked=false; unit.road_segments_built_this_turn=0; unit.ready_next_turn=false
 
 func refresh_visibility() -> void:
 	if visibility_system!=null and grid!=null: visibility_system.recalculate_all()
@@ -538,8 +654,9 @@ func _process_unit_economy_and_status(controller_id: int,player: PlayerState) ->
 			var faction:=registry.faction(player.faction_id)
 			if faction.gameplay_config is LivingMigrationConfig:
 				var config:=faction.gameplay_config as LivingMigrationConfig
-				production["food"]=production.get("food",0)+config.spider_food_production+unit.spider_state.building_count("food_production")*config.food_per_food_building
-				production["silk"]=production.get("silk",0)+config.spider_silk_production
+				var food_per:=config.food_per_food_building+(config.improved_food_building_bonus if _has_unlock_tag(player,"abundant_organs") else 0)
+				production["food"]=production.get("food",0)+config.spider_food_production+unit.spider_state.building_count("food_production")*food_per
+				production["silk"]=production.get("silk",0)+config.spider_silk_production+(config.improved_spider_silk_bonus if _has_unlock_tag(player,"silk_glands") else 0)
 				var synapse_per:=config.synapse_per_synapse_building
 				if _has_unlock_tag(player,"synapse_improvement"): synapse_per+=config.improved_synapse_building_bonus
 				production["synapse"]=production.get("synapse",0)+unit.spider_state.building_count("synapse_production")*synapse_per

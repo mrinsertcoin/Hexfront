@@ -32,14 +32,14 @@ const DISTRICT_SUPPORT:="district_support"
 const LAY_LARVA:="lay_larva"
 const CONSUME:="consume"
 const COMBAT_INTENT:="combat_intent"
-const LOCK_COMBAT:="lock_combat"
+const CLEAR_COMBAT_INTENT:="clear_combat_intent"
 
 const COMMAND_TYPES:=[MOVE,ATTACK,END_TURN,RECRUIT,START_RESEARCH,SITE_INTERACTION,
 	CHOOSE_NURSERY,START_INTERNAL_CONSTRUCTION,QUEUE_BIOLOGICAL_PRODUCTION,DEPLOY_BIOLOGICAL,
 	TRANSFORM_CATERPILLAR,START_SPIDER_CONSTRUCTION,DEPLOY_SPIDER,DEPLOY_MITE,BUILD_ROAD,
 	CONSUME_CORPSE,SELECT_DISEASE,BUILD_DISTRICT,START_BRIDGE_EXTENSION,TOGGLE_DEPLOYMENT,
 	HEAL_UNIT,REPAIR_UNIT,REPAIR_STRUCTURE,DAMAGE_BRIDGE,REPAIR_BRIDGE,DESIGNATE_TARGET,DISTRICT_SUPPORT,
-	LAY_LARVA,CONSUME,COMBAT_INTENT,LOCK_COMBAT]
+	LAY_LARVA,CONSUME,COMBAT_INTENT,CLEAR_COMBAT_INTENT]
 
 var state: GameState
 var rules: GameRules
@@ -72,10 +72,9 @@ func dispatch(peer_id: int,raw_command: Variant) -> Dictionary:
 	var actor: int=peer_to_player[peer_id]
 	if not state.players.has(actor): return _response(sequence,false,"Player is not active in this match.")
 	if state.winner_id!=0: return _response(sequence,false,"The match has ended.")
-	var combat_command:=type in [COMBAT_INTENT,LOCK_COMBAT]
-	if state.turn_state.phase==TurnState.COMBAT_PLANNING:
-		if not combat_command: return _response(sequence,false,"Combat planning is in progress.")
-	elif state.turn_state.neutral_phase or actor!=state.active_player or combat_command:
+	if state.turn_state.phase==TurnState.COMBAT_RESOLUTION:
+		return _response(sequence,false,"Combat is resolving.")
+	if state.turn_state.neutral_phase or not state.turn_state.can_act(actor):
 		return _response(sequence,false,"It is not your turn.")
 	if _is_defeated(actor): return _response(sequence,false,"Defeated players cannot issue commands.")
 	var params:=command.parameters as Dictionary
@@ -138,7 +137,7 @@ func _execute(actor: int,type: String,p: Dictionary) -> RuleResult:
 		LAY_LARVA: return rules.lay_larva(actor,_int(p,"unit_id"),_int(p,"cell_id")) if _has(p,["unit_id","cell_id"]) else null
 		CONSUME: return rules.consume(actor,_int(p,"unit_id"),String(p.get("source_kind","")),_int(p,"source_id")) if _has(p,["unit_id","source_kind","source_id"]) else null
 		COMBAT_INTENT: return rules.submit_combat_intent(actor,_int(p,"unit_id"),String(p.get("option_id","")),_int(p,"target_id",-1)) if _has(p,["unit_id","option_id"]) else null
-		LOCK_COMBAT: return rules.lock_combat(actor) if p.is_empty() else null
+		CLEAR_COMBAT_INTENT: return rules.clear_combat_intent(actor,_int(p,"unit_id")) if _has(p,["unit_id"]) else null
 	return null
 
 func _response(sequence: int,accepted: bool,reason: String,duplicate: bool=false) -> Dictionary:

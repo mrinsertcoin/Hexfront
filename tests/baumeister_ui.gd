@@ -6,6 +6,7 @@ func _run() -> void:
 	board.animate_movement=false
 	var config:=MatchConfig.new()
 	config.planet_size=MatchConfig.PlanetSize.DEV_TINY
+	config.world_population_preset=WorldPopulationConfig.OFF
 	config.player_faction_id="baumeister"
 	config.opponent_faction_id="living_migration"
 	config.opponent_controller="Human"

@@ -180,13 +180,12 @@ func test_lobby_capacity_ready_and_disconnect() -> void:
 	session._update_player(2,"baumeister",true)
 	var changed:=config.duplicate(); changed.world_seed=778; session.set_host_lobby_configuration(changed)
 	check(session.lobby_players.values().all(func(record: Dictionary)->bool: return not bool(record.ready)),"Host configuration changes reset all ready states")
-	# Active disconnect retains the identity until the host explicitly removes it.
+	# Active disconnect is authoritatively eliminated so it cannot block a round.
 	var state:=GameState.new(PlanetGrid.new(2),_setup(["living_migration","baumeister","living_migration"]))
 	session.authoritative_state=state; session.authoritative_rules=GameRules.new(state)
 	session.command_dispatcher=CommandDispatcher.new(state,session.authoritative_rules); session.command_dispatcher.register_peer(1,1); session.command_dispatcher.register_peer(8002,2); session.command_dispatcher.register_peer(8003,3)
 	session.match_has_started=true; session.status=NetworkSession.Status.ACTIVE; session.authoritative_sync_revision=1
-	session._on_peer_disconnected(8002)
-	check(session.status==NetworkSession.Status.INTERRUPTED and paused and session.lobby_players.has(2) and not bool(session.lobby_players[2].connected),"Mid-match disconnect pauses and preserves the public participant record")
 	session.peer_to_player.erase(8003); session.player_to_peer.erase(3)
-	check(session.remove_disconnected_player(2) and not paused and state.players[2].eliminated and session.status==NetworkSession.Status.ACTIVE,"Host Remove Player deterministically eliminates and resumes")
+	session._on_peer_disconnected(8002)
+	check(session.status==NetworkSession.Status.ACTIVE and not paused and session.lobby_players.has(2) and state.players[2].eliminated,"Mid-match disconnect eliminates the player and authoritative progression continues")
 	session.shutdown("done"); session.queue_free(); await process_frame

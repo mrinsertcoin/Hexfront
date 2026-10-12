@@ -107,10 +107,11 @@ func choose_action(state: GameState, rules: GameRules, player_id: int) -> Dictio
 		# Skip dead/disabled
 		if u.hp <= 0:
 			continue
-		if u.attacked:
+		if u.attacked or state.combat_orders.intents.has(u.id):
 			continue
 		for tid in rules.attack_targets(player_id, u.id):
 			var preview: GameRules.Result = rules.preview_attack(player_id, u.id, tid)
+			if _peaceful_village_target(state,player_id,tid) and not _should_raid_village(state,player_id,tid,preview): continue
 			var score: int = 0
 			if preview.winner_id != 0:
 				score = 1000000
@@ -132,7 +133,7 @@ func choose_action(state: GameState, rules: GameRules, player_id: int) -> Dictio
 	for u in my_units:
 		if u.hp <= 0:
 			continue
-		if u.moved or u.attacked:
+		if u.moved or u.attacked or state.combat_orders.intents.has(u.id):
 			continue
 		var reach: Array[int] = rules.reachable(player_id, u.id)
 		for dest in reach:
@@ -145,6 +146,11 @@ func choose_action(state: GameState, rules: GameRules, player_id: int) -> Dictio
 					if not path.is_empty():
 						return {"type":"move","unit":u.id,"dest":dest_pos}
 
+	# Peaceful discovered villages are useful destinations when no immediate
+	# combat or trade action is available.
+	var village_move:=_village_approach(state,rules,player_id,my_units)
+	if not village_move.is_empty(): return village_move
+
 	# 4) Advance toward enemy HQ if no attacks
 	# Find enemy HQ
 	var enemy_hq: Dictionary=_enemy_headquarters(state,observation,player_id)
@@ -153,7 +159,7 @@ func choose_action(state: GameState, rules: GameRules, player_id: int) -> Dictio
 		var best_move: Dictionary = {}
 		var best_dist: int = 9999
 		for u in my_units:
-			if u.hp <= 0 or u.moved:
+			if u.hp <= 0 or u.moved or state.combat_orders.intents.has(u.id):
 				continue
 			var reach2: Array[int] = rules.reachable(player_id, u.id)
 			for dest2 in reach2:
@@ -171,7 +177,7 @@ func choose_action(state: GameState, rules: GameRules, player_id: int) -> Dictio
 	var frontier_score:=2147483647
 	var frontier_distances:=_unexplored_distances(grid,observation)
 	for u: GameState.Unit in my_units:
-		if u.hp<=0 or u.moved: continue
+		if u.hp<=0 or u.moved or state.combat_orders.intents.has(u.id): continue
 		var reachable_cells:=rules.reachable(player_id,u.id); reachable_cells.sort()
 		for destination: int in reachable_cells:
 			var frontier_distance:=int(frontier_distances.get(destination,-1))
@@ -182,6 +188,37 @@ func choose_action(state: GameState, rules: GameRules, player_id: int) -> Dictio
 
 	# 5) Nothing useful: end turn
 	return {"type":"end"}
+
+func _peaceful_village_target(state: GameState,player_id: int,target_id: int) -> bool:
+	var target:=state.combat_target(target_id)
+	if target is WorldSiteState:
+		var definition:=state.registry.world_site(target.definition_id)
+		return definition!=null and definition.category=="village" and state.relationship_for_site(player_id,target)!=RelationshipState.Kind.HOSTILE
+	if target is GameState.Unit and target.home_site_id>=0:
+		var site: WorldSiteState=state.world_sites.get(target.home_site_id)
+		return site!=null and state.relationship_for_site(player_id,site)!=RelationshipState.Kind.HOSTILE
+	return false
+
+func _should_raid_village(state: GameState,player_id: int,target_id: int,preview: RuleResult) -> bool:
+	if not state.world_sites.has(target_id) or not preview.killed: return false
+	var total:=0
+	for amount: int in state.players[player_id].resources.values(): total+=amount
+	return total<=4
+
+func _village_approach(state: GameState,rules: GameRules,player_id: int,units: Array[GameState.Unit]) -> Dictionary:
+	var best:={}; var best_score:=2147483647
+	for site: WorldSiteState in rules.interactable_sites(player_id):
+		var definition:=state.registry.world_site(site.definition_id)
+		if definition==null or definition.category!="village" or site.runtime_state.get("destroyed",false): continue
+		if state.relationship_for_site(player_id,site)==RelationshipState.Kind.HOSTILE: continue
+		for unit: GameState.Unit in units:
+			if unit.moved or unit.attacked: continue
+			var current:=state.grid.distance(unit.cell_id,site.cell_id)
+			for destination: int in rules.reachable(player_id,unit.id):
+				var distance:=state.grid.distance(destination,site.cell_id)
+				var score:=distance*100000+destination
+				if distance<current and score<best_score: best_score=score; best={"type":"move","unit":unit.id,"dest":destination}
+	return best
 
 func _unexplored_distances(grid: PlanetGrid,observation: TeamObservation) -> Dictionary[int,int]:
 	var distance: Dictionary[int,int]={}; var queue: Array[int]=[]
@@ -235,11 +272,11 @@ func _living_migration_action(state: GameState,rules: GameRules,player_id: int) 
 		var technologies:=rules.available_technologies(player_id)
 		if not technologies.is_empty(): return {"type":"research","technology":_preferred_technology(state,player_id,technologies)}
 	for spider: GameState.Unit in spiders:
-		if spider.spider_state.building_count("research_building")==0 and spider.spider_state.construction==null and not spider.moved:
+		if spider.spider_state.building_count("research_building")==0 and spider.spider_state.construction==null:
 			var config:=rules.living_migration_rules.config_for(player_id)
 			if player.resource_amount("food")>=config.internal_building_food_cost:
 				return {"type":"lm_internal","spider":spider.id,"building":"research_building"}
-		if spider.spider_state.nursery_jobs.size()<2 and not spider.moved:
+		if spider.spider_state.nursery_jobs.size()<2:
 			for recipe_id: String in ContentRegistry._sorted_keys(state.registry.biological_recipes):
 				var recipe:=state.registry.biological_recipe(recipe_id)
 				if recipe.branch_id==spider.spider_state.nursery_branch and player.can_afford(recipe.costs):

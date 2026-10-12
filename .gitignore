@@ -22,3 +22,19 @@ dist/
 
 # Local source-art workspace (runtime copies live under assets/)
 art_source/
+
+# Keep terrain authoring archives and unused PBR/alternate textures locally.
+# Only the five production albedos (and their Godot import settings) ship in Git.
+/assets/terrain/source/archives/
+/assets/terrain/materials/**/*.png
+/assets/terrain/materials/**/*.png.import
+!/assets/terrain/materials/grassland/grass/albedo.png
+!/assets/terrain/materials/grassland/grass/albedo.png.import
+!/assets/terrain/materials/forest/soil/albedo.png
+!/assets/terrain/materials/forest/soil/albedo.png.import
+!/assets/terrain/materials/dryland/sand/albedo.png
+!/assets/terrain/materials/dryland/sand/albedo.png.import
+!/assets/terrain/materials/rocky/slate/albedo.png
+!/assets/terrain/materials/rocky/slate/albedo.png.import
+!/assets/terrain/materials/wetland/leaf_mud/albedo.png
+!/assets/terrain/materials/wetland/leaf_mud/albedo.png.import

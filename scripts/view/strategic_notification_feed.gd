@@ -13,6 +13,7 @@ var records: Array[Dictionary]=[]
 var list: VBoxContainer
 
 func _ready() -> void:
+	MythicFrame.apply(self,true)
 	visible=false
 	mouse_filter=Control.MOUSE_FILTER_STOP
 	var margin:=MarginContainer.new()

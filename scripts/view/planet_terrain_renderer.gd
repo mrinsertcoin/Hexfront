@@ -1,7 +1,7 @@
 class_name PlanetTerrainRenderer
 extends Node3D
-## Static 20-face chunks share a welded vertex/normal source; gameplay cells are
-## never terrain patches. Godot can frustum-cull the independent face instances.
+## Twenty spatial draw chunks. Production geometry follows terrace/ramp cells;
+## the continuous mesh path remains available for explicit reference fixtures.
 var world: GeneratedPlanet
 var config: TerrainRenderConfig
 var surface: TerrainSurfaceSampler
@@ -13,6 +13,8 @@ var colors: PackedColorArray = []
 var uvs: PackedVector2Array = []
 var uv2s: PackedVector2Array = []
 var chunks: Array[MeshInstance3D] = []
+var chunk_ranges: Array[Vector2i]=[]
+var cliff_overlay: CliffOverlay
 var water: PlanetWaterRenderer
 var dressing: WorldDressing
 var build_ms: float = 0.0
@@ -28,49 +30,55 @@ func rebuild(planet: GeneratedPlanet, settings: TerrainRenderConfig,
 	world = planet
 	config = settings.duplicate(true)
 	surface = TerrainSurfaceSampler.new(world, config)
-	var base := PlanetGrid.new(0)
-	directions = base._vertices.duplicate()
-	faces = base._faces.duplicate()
-	# Each subdivision preserves contiguous original-face groups.
-	for level in range(config.terrain_subdivision_level):
-		var cache: Dictionary = {}
-		var next: Array[Vector3i] = []
+	chunk_ranges.clear(); directions.clear(); faces.clear()
+	if world.terraces!=null:
+		TerracedTerrainMesh.new().build(self)
+	else:
+		var base := PlanetGrid.new(0)
+		directions = base._vertices.duplicate()
+		faces = base._faces.duplicate()
+		# Each subdivision preserves contiguous original-face groups.
+		for level in range(config.terrain_subdivision_level):
+			var cache: Dictionary = {}
+			var next: Array[Vector3i] = []
+			for f: Vector3i in faces:
+				var ab: int = _midpoint(f.x,f.y,cache)
+				var bc: int = _midpoint(f.y,f.z,cache)
+				var ca: int = _midpoint(f.z,f.x,cache)
+				next.append_array([Vector3i(f.x,ab,ca), Vector3i(ab,f.y,bc), Vector3i(ca,bc,f.z), Vector3i(ab,bc,ca)])
+			faces = next
+		for direction: Vector3 in directions:
+			vertices.append(surface.sample_position(direction))
+			normals.append(Vector3.ZERO)
+			var data: PlanetWorldCellData = world.sample_fields(direction)
+			var weights: Array[float] = [0,0,0,0,0]
+			for i in range(world.config.biomes.size()):
+				var slot: int = StylizedTerrainMaterial.IDS.find(world.config.biomes[i].biome_id)
+				if slot >= 0: weights[slot] += data.biome_weights[i]
+			colors.append(Color(weights[0],weights[1],weights[2],weights[3]))
+			uvs.append(Vector2(data.effective_moisture,data.terrain_roughness))
+			uv2s.append(Vector2(weights[4],data.hydrology.wetland_potential if data.hydrology != null else 0.0))
+		# Area-weighted smooth normals from actual displaced geometry, shared at seams.
 		for f: Vector3i in faces:
-			var ab: int = _midpoint(f.x,f.y,cache)
-			var bc: int = _midpoint(f.y,f.z,cache)
-			var ca: int = _midpoint(f.z,f.x,cache)
-			next.append_array([Vector3i(f.x,ab,ca), Vector3i(ab,f.y,bc), Vector3i(ca,bc,f.z), Vector3i(ab,bc,ca)])
-		faces = next
-	for direction: Vector3 in directions:
-		vertices.append(surface.sample_position(direction))
-		normals.append(Vector3.ZERO)
-		var data: PlanetWorldCellData = world.sample_fields(direction)
-		var weights: Array[float] = [0,0,0,0,0]
-		for i in range(world.config.biomes.size()):
-			var slot: int = StylizedTerrainMaterial.IDS.find(world.config.biomes[i].biome_id)
-			if slot >= 0: weights[slot] += data.biome_weights[i]
-		colors.append(Color(weights[0],weights[1],weights[2],weights[3]))
-		uvs.append(Vector2(data.effective_moisture,data.terrain_roughness))
-		uv2s.append(Vector2(weights[4],data.hydrology.wetland_potential if data.hydrology != null else 0.0))
-	# Area-weighted smooth normals from actual displaced geometry, shared at seams.
-	for f: Vector3i in faces:
-		var normal: Vector3 = (vertices[f.y]-vertices[f.x]).cross(vertices[f.z]-vertices[f.x])
-		for id: int in [f.x,f.y,f.z]: normals[id] += normal
-	for i in range(normals.size()): normals[i] = normals[i].normalized()
+			var normal: Vector3 = (vertices[f.y]-vertices[f.x]).cross(vertices[f.z]-vertices[f.x])
+			for id: int in [f.x,f.y,f.z]: normals[id] += normal
+		for i in range(normals.size()): normals[i] = normals[i].normalized()
+		var count:=faces.size()/20
+		for index in range(20): chunk_ranges.append(Vector2i(index*count,count))
 	var picking_faces := PackedVector3Array()
 	for f: Vector3i in faces:
 		picking_faces.append_array(PackedVector3Array([vertices[f.x],vertices[f.z],vertices[f.y]]))
 	surface.picking_mesh = TriangleMesh.new()
 	surface.picking_mesh.create_from_faces(picking_faces)
-	var material: ShaderMaterial = StylizedTerrainMaterial.build(config)
-	var per_chunk: int = faces.size() / 20
+	var material: ShaderMaterial = StylizedTerrainMaterial.build(config,world.terraces!=null)
 	for chunk in range(20):
 		var instance := MeshInstance3D.new()
 		instance.name = "TerrainFace_%02d" % chunk
-		instance.mesh = _chunk_mesh(chunk * per_chunk, per_chunk)
+		instance.mesh = _chunk_mesh(chunk_ranges[chunk].x,chunk_ranges[chunk].y)
 		instance.material_override = material
 		add_child(instance)
 		chunks.append(instance)
+	cliff_overlay=CliffOverlay.new(); add_child(cliff_overlay); cliff_overlay.configure(world,surface)
 	water = PlanetWaterRenderer.new()
 	add_child(water)
 	water.rebuild(world,surface)

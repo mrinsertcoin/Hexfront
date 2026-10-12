@@ -6,6 +6,7 @@ func _run() -> void:
 	board.animate_movement=false
 	var config:=MatchConfig.new()
 	config.planet_size=MatchConfig.PlanetSize.DEV_TINY
+	config.world_population_preset=WorldPopulationConfig.OFF
 	config.player_faction_id="living_migration"
 	config.opponent_faction_id="red"
 	config.opponent_controller="Human"
@@ -22,7 +23,7 @@ func _run() -> void:
 	check(board.selected_unit_id==spider.id and board.unit_label.text.contains("Spider internals: 1/9"),"Spider selection opens internal-slot panel")
 	check(board.unit_label.text.contains("Ant Hill") and board.unit_label.text.contains("Mites:"),"Spider panel shows nursery and mite progress")
 	var has_production:=false; var has_research:=false; var has_construction:=false
-	for child: Node in board.recruit_box.get_children():
+	for child: Node in board.unit_info_panel.action_flows[UnitInfoPanel.GROUP_CITY].get_children():
 		if child is Button:
 			var label: String=(child as Button).text
 			has_production=has_production or label.contains("Worker Ant Brood")

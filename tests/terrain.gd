@@ -71,7 +71,9 @@ func _run() -> void:
 	entity.play_path(path,board.grid,board.SURFACE_OFFSET)
 	for i in range(180):
 		entity.advance_movement(0.033)
-		check(absf(entity.position.length()-board.terrain_surface.radius_at(entity.position)-board.SURFACE_OFFSET)<0.0001,"Movement follows hills and valleys without clipping")
+		var contact:=board.terrain_surface.ground_position(entity.position.normalized(),0.0)
+		var contact_normal:=board.terrain_surface.ground_normal(entity.position.normalized())
+		check(absf((entity.position-contact).dot(contact_normal)-board.SURFACE_OFFSET)<0.001,"Movement contacts the rendered terrain without clipping")
 	entity.cancel_movement()
 	var original: PackedVector3Array=renderer.vertices.duplicate()
 	var masks: PackedColorArray=renderer.colors.duplicate()

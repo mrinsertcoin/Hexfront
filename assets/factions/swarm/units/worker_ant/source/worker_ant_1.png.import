@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bfhyfyt3xldj1"
-path="res://.godot/imported/worker_ant_1.png-f46bafff3451adb35091af783632e6a8.ctex"
+path.s3tc="res://.godot/imported/worker_ant_1.png-f46bafff3451adb35091af783632e6a8.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "0488762d9880feaf582901a068004a3a"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/factions/swarm/units/worker_ant/source/worker_ant_1.png"
-dest_files=["res://.godot/imported/worker_ant_1.png-f46bafff3451adb35091af783632e6a8.ctex"]
+dest_files=["res://.godot/imported/worker_ant_1.png-f46bafff3451adb35091af783632e6a8.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -39,5 +40,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=0
+process/size_limit=1024
 detect_3d/compress_to=1

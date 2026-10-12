@@ -16,3 +16,5 @@ Runtime content is copied from `art_source/meshy_lods`; the game never loads fro
 Candidates 001–004, 006–007, and 014–016 remain source-only. They were rejected because their isolated silhouette was unclear, combined unrelated terrain fragments, repeated an accepted form without useful variation, or did not survive decimation cleanly enough for tactical use.
 
 The resolver grounds and centers each supplied mesh, normalizes metallic/roughness/normal response, and applies only restrained shared-palette tint. Scale remains a per-asset presentation setting. Trees, boulders, and formations cast shadows; smaller cover does not.
+
+Runtime texture imports use GPU compression and a 1024 / 512 / 256 pixel limit for LOD0 / LOD1 / LOD2. Original files remain unchanged. Rendering partitions each asset/LOD into at most 20 spatial MultiMesh sectors so the camera can cull distant scenery. See [the performance report](../../../docs/Planet_Performance.md) for benchmarks and the busy Medium test.

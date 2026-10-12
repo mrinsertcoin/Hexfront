@@ -3,7 +3,8 @@
 [resource]
 script = ExtResource("1")
 id = "lm_marsh_metabolism"
-display_name = "Marsh Metabolism (Provisional)"
+display_name = "Marsh Metabolism"
+description = "Unlocks Dragonflies, Mosquitoes and Poison Dart Frogs from marsh nurseries."
 research_cost = 5
 prerequisite_ids = PackedStringArray("lm_symbiotic_foundations")
 unlock_unit_ids = PackedStringArray("dragonfly", "mosquito", "poison_dart_frog")

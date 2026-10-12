@@ -2,10 +2,10 @@ class_name NetworkProtocol
 extends RefCounted
 ## Stable compatibility contract for multiplayer messages.
 
-const NETWORK_PROTOCOL_VERSION:=3
-const GAME_BUILD_VERSION:="0.2.0-m21-dev"
-const GAMEPLAY_DATA_VERSION:=4
-const SNAPSHOT_SCHEMA_VERSION:=4
+const NETWORK_PROTOCOL_VERSION:=6
+const GAME_BUILD_VERSION:="0.4.3-living-research-roots"
+const GAMEPLAY_DATA_VERSION:=10
+const SNAPSHOT_SCHEMA_VERSION:=7
 const DEFAULT_PORT:=24567
 const MAX_PLAYERS:=4
 const MIN_PLAYERS:=2

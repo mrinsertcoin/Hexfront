@@ -152,6 +152,8 @@ func validate() -> PackedStringArray:
 			errors.append("World site %s references missing guardian group %s" % [id,site.guardian_group_id])
 		for resource_id: String in site.reward_resources:
 			if not resources.has(resource_id): errors.append("World site %s references missing reward resource %s" % [id,resource_id])
+		for resource_id: String in site.loot_resources:
+			if not resources.has(resource_id): errors.append("World site %s references missing loot resource %s" % [id,resource_id])
 	for id: String in _sorted_keys(biological_recipes):
 		var recipe: BiologicalRecipeDefinition=biological_recipes[id]
 		_validate_refs(id,"outcome unit",recipe.outcome_unit_ids,units,errors)
@@ -255,12 +257,13 @@ func _refresh_fingerprint() -> void:
 			",".join(d.unlock_unit_ids),",".join(d.unlock_structure_ids),",".join(d.unlock_tags),",".join(d.modifier_ids)])
 	for id: String in _sorted_keys(world_sites):
 		var d: WorldSiteDefinition=world_sites[id]
-		rows.append("site:%s:%s:%s:%s:%s:%s:%s:%d:%d:%s:%s" % [id,d.category,d.interaction_type,
+		rows.append("site:%s:%s:%s:%s:%s:%s:%s:%d:%d:%s:%s:%d:%s:%s:%d" % [id,d.category,d.interaction_type,
 			str(d.blocks_movement),",".join(d.trade_recipe_ids),_dict_record(d.reward_resources),str(d.research_progress_reward),
-			d.initial_charges,d.regeneration_turns,str(d.remove_when_exhausted),d.guardian_group_id])
+			d.initial_charges,d.regeneration_turns,str(d.remove_when_exhausted),d.guardian_group_id,d.max_hp,d.neutral_allegiance_id,
+			_dict_record(d.loot_resources),d.loot_research_progress])
 	for id: String in _sorted_keys(neutral_groups):
 		var d: NeutralGroupDefinition=neutral_groups[id]
-		rows.append("neutral:%s:%s:%s:%s:%d:%d:%d:%s" % [id,",".join(d.unit_ids),_dict_record(d.composition),d.relationship_policy,d.difficulty,d.awareness_range,d.leash_distance,str(d.site_guardian)])
+		rows.append("neutral:%s:%s:%s:%s:%d:%d:%d:%s:%s" % [id,",".join(d.unit_ids),_dict_record(d.composition),d.relationship_policy,d.difficulty,d.awareness_range,d.leash_distance,str(d.site_guardian),d.neutral_allegiance_id])
 	for id: String in _sorted_keys(trade_recipes):
 		var d: TradeRecipeDefinition=trade_recipes[id]
 		rows.append("trade:%s:%s:%s:%s:%d" % [id,_dict_record(d.input_costs),_dict_record(d.output_rewards),",".join(d.allowed_faction_ids),d.usage_limit_per_turn])

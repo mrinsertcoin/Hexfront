@@ -7,11 +7,22 @@ var port:=24567
 var deadline:=0
 var state: GameState
 var ready_sent:=false
-var turn_submitted:=false
-var turn_accepted:=false
+var movement_submitted:=false
+var movement_accepted:=false
+var order_submitted:=false
+var order_accepted:=false
 var host_started:=false
 var finishing:=false
 var observed_turns: Array[int]=[]
+var saw_simultaneous_stage:=false
+
+class SlowLoadingSession extends NetworkSession:
+	var delayed_first_snapshot: bool=false
+	func _receive_observation(snapshot: Dictionary) -> void:
+		if not delayed_first_snapshot:
+			delayed_first_snapshot=true
+			await get_tree().create_timer(0.25).timeout
+		super._receive_observation(snapshot)
 
 func _initialize() -> void: call_deferred("_run")
 
@@ -21,7 +32,10 @@ func _run() -> void:
 		elif arg.begins_with("--port="): port=int(arg.trim_prefix("--port="))
 		elif arg.begins_with("--result="): result_path=arg.trim_prefix("--result=")
 	deadline=Time.get_ticks_msec()+40000
-	session=NetworkSession.new(); session.name="NetworkSession"; root.add_child(session); await process_frame
+	# A deliberately slower fourth client guards the loading barrier: fast
+	# clients must not submit their first command while the host is LOADING.
+	session=SlowLoadingSession.new() if role=="client4" else NetworkSession.new()
+	session.name="NetworkSession"; root.add_child(session); await process_frame
 	session.lobby_changed.connect(_lobby_changed)
 	session.observation_received.connect(_observation)
 	session.command_completed.connect(_command_result)
@@ -56,7 +70,15 @@ func _lobby_changed(records: Array) -> void:
 	var error:=session.announce_match(config.public_network_dictionary())
 	if not error.is_empty(): return _finish(false,error)
 	state=GameState.new(PlanetGrid.new(2,12.0),{"player_ids":config.player_ids(),"player_names":config.player_names(),
-		"player_colors":config.player_colors(),"faction_ids":config.faction_ids(),"controller_kinds":config.controller_kinds(),"team_ids":config.team_ids(),"simultaneous_combat":false})
+		"player_colors":config.player_colors(),"faction_ids":config.faction_ids(),"controller_kinds":config.controller_kinds(),"team_ids":config.team_ids(),
+		"simultaneous_combat":true,"simultaneous_player_turns":true})
+	var p1: GameState.Unit; var p2: GameState.Unit
+	for unit: GameState.Unit in state.units.values():
+		if unit.attack_damage<=0: continue
+		if unit.controller_id==1 and p1==null: p1=unit
+		elif unit.controller_id==2 and p2==null: p2=unit
+	if p1!=null and p2!=null: p2.cell_id=state.grid.get_neighbors(p1.cell_id)[0]
+	state.refresh_visibility()
 	session.attach_authority(state,GameRules.new(state))
 
 func _status_changed(value: int,_message: String) -> void:
@@ -66,22 +88,48 @@ func _status_changed(value: int,_message: String) -> void:
 func _observation(snapshot: Dictionary) -> void:
 	if session.status!=NetworkSession.Status.ACTIVE: return
 	var turn: Dictionary=snapshot.turn; var active:=int(turn.active_player)
+	var actionable: Array=turn.get("actionable_players",[])
+	if actionable.size()==4: saw_simultaneous_stage=true
 	print("FFA integration ",role," observes P",active," round ",int(turn.round_number)," revision ",int(snapshot.sync_revision))
 	if observed_turns.is_empty() or observed_turns[-1]!=active: observed_turns.append(active)
 	if int(turn.round_number)>=2 and role=="host":
-		var valid:=observed_turns.slice(0,4)==[1,2,3,4]
+		var valid:=saw_simultaneous_stage and movement_accepted and order_accepted
 		session.abort_match_to_lobby("Four-player integration complete")
-		return _finish(valid,"Observed sequential turns P1-P4 and synchronized four recipient observations")
-	if active!=session.local_player_id or turn_submitted: return
-	turn_submitted=true; session.submit_command(CommandDispatcher.END_TURN,{})
+		return _finish(valid,"Observed four simultaneous players, movement-time combat orders, automatic resolution, and round-two synchronization")
+	if not actionable.has(session.local_player_id) or movement_submitted: return
+	if role in ["host","client3"] and not order_submitted:
+		order_submitted=true
+		if role=="host":
+			var attacker: GameState.Unit; var target_id:=-1
+			for unit: GameState.Unit in state.units.values():
+				if unit.controller_id==1 and unit.attack_damage>0: attacker=unit; break
+			if attacker!=null:
+				var targets:=GameRules.new(state).attack_targets(1,attacker.id)
+				if not targets.is_empty(): target_id=targets[0]
+			session.submit_command(CommandDispatcher.COMBAT_INTENT,{"unit_id":attacker.id,"option_id":"attack","target_id":target_id})
+		else:
+			var own: Array=snapshot.owned_entities
+			var unit_id:=-1
+			for entity: Dictionary in own:
+				if entity.kind=="unit": unit_id=int(entity.id); break
+			session.submit_command(CommandDispatcher.COMBAT_INTENT,{"unit_id":unit_id,"option_id":"dodge"})
+		return
+	movement_submitted=true; session.submit_command(CommandDispatcher.END_TURN,{})
 
 func _command_result(result: Dictionary) -> void:
-	if turn_submitted and int(result.client_sequence)==1:
-		turn_accepted=bool(result.accepted)
-		if not turn_accepted: _finish(false,"End-turn command rejected")
+	if int(result.client_sequence)==1:
+		if role in ["host","client3"]:
+			order_accepted=bool(result.accepted)
+			if not order_accepted: _finish(false,"Movement-time combat order rejected")
+		else:
+			movement_accepted=bool(result.accepted)
+			if not movement_accepted: _finish(false,"Movement-phase command rejected")
+	elif int(result.client_sequence)==2:
+		movement_accepted=bool(result.accepted)
+		if not movement_accepted: _finish(false,"Movement-phase command rejected")
 
 func _session_ended(reason: String) -> void:
-	if role!="host": _finish(turn_accepted,"Turn accepted; "+reason)
+	if role!="host": _finish(movement_accepted and (order_accepted if role=="client3" else true),"Movement and combat workflow accepted; "+reason)
 
 func _finish(ok: bool,message: String) -> void:
 	if finishing: return

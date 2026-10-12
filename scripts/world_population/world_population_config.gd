@@ -2,7 +2,7 @@ class_name WorldPopulationConfig
 extends Resource
 ## Independent recipe for logical sites and neutral inhabitants.
 
-const VERSION:=2
+const VERSION:=3
 const OFF:="Off"
 const SPARSE:="Sparse"
 const STANDARD:="Standard"
@@ -31,12 +31,17 @@ const PRESETS:=[OFF,SPARSE,STANDARD,DENSE]
 @export_range(0,20) var major_site_spacing: int=8
 @export_range(0,12) var neutral_spacing: int=3
 @export_range(0,20) var neutral_start_distance: int=5
+@export_range(0,4) var villages_per_player: int=0
+@export_range(1,20) var village_spacing: int=7
+@export_range(0,20) var village_start_distance: int=5
+@export_range(0,4) var player_count: int=2
 var start_cells: Array[int]=[]
 
 static func from_preset(value: String) -> WorldPopulationConfig:
 	var result:=WorldPopulationConfig.new()
 	result.preset=value if value in PRESETS else STANDARD
 	result.enabled=result.preset!=OFF
+	result.villages_per_player=0 if result.preset==OFF else 2
 	match result.preset:
 		SPARSE:
 			result.trade_posts_per_1000_cells=2.0; result.resource_sites_per_1000_cells=8.0
@@ -65,6 +70,7 @@ func fingerprint_record() -> String:
 	return JSON.stringify({"version":generation_version,"population_seed":population_seed,"preset":preset,"enabled":enabled,
 		"density":[trade_posts_per_1000_cells,resource_sites_per_1000_cells,ruins_per_1000_cells,neutral_groups_per_1000_cells],
 		"caps":[maximum_trade_posts,maximum_resource_sites,maximum_ruins,maximum_neutral_groups],
-		"spacing":[site_spacing,safe_start_distance,major_site_spacing,neutral_spacing,neutral_start_distance],
+		"spacing":[site_spacing,safe_start_distance,major_site_spacing,neutral_spacing,neutral_start_distance,village_spacing,village_start_distance],
+		"villages":[villages_per_player,player_count],
 		"site_definition_ids":Array(site_definition_ids),"site_counts":site_counts,
 		"neutral_group_ids":Array(neutral_group_ids),"start_cells":starts},"",true,true)

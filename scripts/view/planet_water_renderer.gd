@@ -15,7 +15,7 @@ func rebuild(planet: GeneratedPlanet, sampler: TerrainSurfaceSampler) -> void:
 	if world.config.hydrology.enable_oceans:
 		var ocean := MeshInstance3D.new()
 		var sphere := SphereMesh.new()
-		sphere.radius = world.grid_reference.planet_radius + surface.config.mapped_height(world.config.hydrology.sea_level)
+		sphere.radius = world.grid_reference.planet_radius + surface.mapped_world_height(world.config.hydrology.sea_level)
 		sphere.height = sphere.radius*2; sphere.radial_segments=128; sphere.rings=64
 		ocean.mesh=sphere; ocean.material_override=_material(true); add_child(ocean)
 
@@ -34,7 +34,7 @@ func _water_point(direction: Vector3, from: int, to: int, t: float) -> Vector3:
 	for pair: Vector2 in [Vector2(from,1.0-smoothstep(0.0,0.35,t)),Vector2(to,smoothstep(0.65,1.0,t))]:
 		var lake_id: int = world.hydrology.cells[int(pair.x)].lake_id
 		if lake_id >= 0:
-			var level: float = world.grid_reference.planet_radius + surface.config.mapped_height(world.hydrology.lakes[lake_id].surface_height)
+			var level: float = world.grid_reference.planet_radius + surface.mapped_world_height(world.hydrology.lakes[lake_id].surface_height)
 			radius = lerpf(radius,maxf(radius,level),pair.y)
 	return direction.normalized()*(radius+surface.config.water_offset)
 
@@ -138,7 +138,7 @@ func _build_lake(lake: LakeData) -> void:
 	var planar := PackedVector2Array()
 	for p: Vector3 in contour: planar.append(Vector2(p.dot(frame.x),p.dot(frame.z)))
 	var triangles: PackedInt32Array = Geometry2D.triangulate_polygon(planar)
-	var radius: float=world.grid_reference.planet_radius+surface.config.mapped_height(lake.surface_height)+surface.config.water_offset
+	var radius: float=world.grid_reference.planet_radius+surface.mapped_world_height(lake.surface_height)+surface.config.water_offset
 	var tool:=SurfaceTool.new(); tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in range(0,triangles.size(),3):
 		var a: Vector3 = contour[triangles[i]]

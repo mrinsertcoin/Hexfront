@@ -46,7 +46,8 @@ func _lobby_changed(_records: Array) -> void:
 		for record: Dictionary in session.lobby_records(): config.player_assignments.append({"player_id":record.player_id,"player_name":record.player_name,"faction_id":record.faction_id,"team_id":record.player_id,"controller_kind":ControllerState.HUMAN})
 		var error:=session.announce_match(config.public_network_dictionary())
 		if not error.is_empty(): return _finish(false,error)
-		state=GameState.new(PlanetGrid.new(3,12.0),{"faction_ids":config.faction_ids(),"controller_kinds":config.controller_kinds(),"team_ids":config.team_ids(),"simultaneous_combat":false})
+		state=GameState.new(PlanetGrid.new(3,12.0),{"faction_ids":config.faction_ids(),"controller_kinds":config.controller_kinds(),"team_ids":config.team_ids(),
+			"simultaneous_combat":true,"simultaneous_player_turns":true})
 		session.attach_authority(state,GameRules.new(state))
 
 func _match_announced(_config: Dictionary) -> void: pass
@@ -56,14 +57,16 @@ func _status_changed(value: int,_message: String) -> void:
 		_observation(session.latest_observation)
 
 func _observation(snapshot: Dictionary) -> void:
+	var actionable: Array=snapshot.turn.get("actionable_players",[])
+	print("Network integration ",role," P",session.local_player_id," status=",session.status," round ",int(snapshot.turn.round_number)," actionable=",actionable," revision=",int(snapshot.sync_revision))
+	if session.status!=NetworkSession.Status.ACTIVE: return
 	if role=="host":
-		if session.status!=NetworkSession.Status.ACTIVE: return
-		if not sent_host_end and int(snapshot.turn.active_player)==1:
+		if not sent_host_end and actionable.has(session.local_player_id):
 			sent_host_end=true; session.submit_command(CommandDispatcher.END_TURN,{})
-		elif sent_host_end and int(snapshot.turn.active_player)==1:
+		elif sent_host_end and int(snapshot.turn.round_number)>=2 and actionable.has(session.local_player_id):
 			host_turn_restored=true
 		return
-	if int(snapshot.turn.active_player)!=session.local_player_id or sent_move: return
+	if not actionable.has(session.local_player_id) or sent_move: return
 	var own: Array=snapshot.get("owned_entities",[])
 	var unit: Dictionary={}
 	for entity: Dictionary in own:
@@ -78,6 +81,7 @@ func _observation(snapshot: Dictionary) -> void:
 	sent_move=true; session.submit_command(CommandDispatcher.MOVE,{"unit_id":int(unit.id),"destination":destination})
 
 func _command_result(result: Dictionary) -> void:
+	print("Network integration ",role," command result=",result)
 	if role!="client": return
 	if sent_move and not received_duplicate and int(result.client_sequence)==1 and bool(result.accepted):
 		# Replay the exact envelope to exercise server-side idempotency over ENet.

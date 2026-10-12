@@ -11,7 +11,7 @@ func _run() -> void:
 	board.set_process(false)
 	await process_frame
 	await process_frame
-	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.combat_planning_enabled=false; board._refresh_display()
+	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.simultaneous_combat_enabled=false; board._refresh_display()
 	var initial: String = Snapshot.snapshot(board.game_state)
 	for repeat in range(3):
 		board._refresh_display()
@@ -42,7 +42,8 @@ func _run() -> void:
 	var stale_recruit:=false
 	for child: Node in board.recruit_box.get_children():
 		if child is Button: stale_recruit=stale_recruit or (child as Button).name.begins_with("Recruit")
-	check(not stale_recruit and board.recruit_box.get_child_count()>=2, "Switching from HQ to unit replaces recruitment with unit context actions")
+	var tactical_actions: int=(board.unit_info_panel.action_flows[UnitInfoPanel.GROUP_ATTACKS] as Control).get_child_count()+(board.unit_info_panel.action_flows[UnitInfoPanel.GROUP_STANCES] as Control).get_child_count()
+	check(not stale_recruit and board.recruit_box.get_child_count()==0 and tactical_actions>=1,"Switching from HQ to unit moves context actions into the tactical overlay")
 	click(_screen(board.game_state.structures[100].cell_id))
 	keypress(KEY_ESCAPE)
 	check(board.selected_structure_id == -1 and board.selected == board.NONE, "Escape clears HQ selection")
@@ -76,16 +77,13 @@ func _run() -> void:
 
 	# Rendering/inspection must never trigger AI actions.
 	board._new_match("Vs AI")
-	board.rules.try_end_turn(1)
 	var before: String = Snapshot.snapshot(board.game_state)
 	board._refresh_display()
-	await process_frame
-	check(Snapshot.snapshot(board.game_state) == before and not board._ai_running, "Redraw is side-effect free during AI turn")
+	check(Snapshot.snapshot(board.game_state) == before and board._ai_running, "Redraw is side-effect free during AI turn")
 	board.request_end_turn()
 	check(Snapshot.snapshot(board.game_state) == before, "Human cannot skip AI turn")
 	# Start AI, then restart while its coroutine is waiting; old work must stop.
 	board._ai_delay = 0.0
-	board._queue_ai_turn()
 	await process_frame
 	board._new_match("Hotseat")
 	before = Snapshot.snapshot(board.game_state)
@@ -93,7 +91,6 @@ func _run() -> void:
 		await process_frame
 	check(Snapshot.snapshot(board.game_state) == before and not board._ai_running, "Restart cancels queued/in-progress AI")
 	board._new_match("Vs AI")
-	board.request_end_turn()
 	for frame in range(160):
 		if board.game_state.active_player == 1 and not board._ai_running:
 			break

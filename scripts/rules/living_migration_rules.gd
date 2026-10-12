@@ -23,10 +23,13 @@ func after_move(unit_id: int,path: Array[int]=[]) -> String:
 	if not state.units.has(unit_id): return ""
 	var unit: GameState.Unit=state.units[unit_id]
 	var definition:=state.registry.unit(unit.definition_id)
+	if unit.spider_state!=null:
+		state.living_migration.remove_road(unit.controller_id,unit.cell_id)
 	if "road_builder" in definition.tags:
 		var created:=0
-		for cell_id: int in path:
-			if state.grid.contains(cell_id) and not state.is_water_cell(cell_id):
+		for index in range(path.size()):
+			var cell_id: int=path[index]
+			if index>0 and state.grid.contains(cell_id) and not state.is_water_cell(cell_id) and not _has_spider_at(cell_id):
 				if cell_id not in state.living_migration.roads.get(unit.controller_id,{}): created+=1
 				state.living_migration.add_road(unit.controller_id,cell_id)
 		return " Laid ant road across %d traversed cell(s)." % created
@@ -56,10 +59,12 @@ func end_turn(controller_id: int) -> void:
 	for unit: GameState.Unit in _owned_units(controller_id):
 		if unit.spider_state!=null: research_buildings+=unit.spider_state.building_count("research_building")
 	if research_buildings>0 and not state.players[controller_id].research.current_technology_id.is_empty():
-		research.add_research_progress(controller_id,research_buildings*config.research_per_building)
+		var per_organ:=config.research_per_building+(config.improved_research_building_bonus if research.has_unlock_tag(controller_id,"root_memory") else 0)
+		research.add_research_progress(controller_id,research_buildings*per_organ)
 
 func start_turn(controller_id: int) -> void:
 	if not is_living_migration(controller_id): return
+	_cleanup_spider_roads()
 	for unit: GameState.Unit in _owned_units(controller_id):
 		if "ant" not in state.registry.unit(unit.definition_id).tags: continue
 		if is_ant_connected(unit): unit.disconnected_turns=0
@@ -68,7 +73,6 @@ func start_turn(controller_id: int) -> void:
 
 func _advance_spider(unit: GameState.Unit,config: LivingMigrationConfig) -> void:
 	var spider:=unit.spider_state
-	if unit.moved: return
 	if spider.construction!=null:
 		spider.construction.advance()
 		if spider.construction.is_complete() and spider.construction.recipe_id.begins_with("internal:"):
@@ -96,7 +100,6 @@ func start_internal_construction(controller_id: int,spider_id: int,building_id: 
 	if not error.is_empty(): return RuleResult.new(false,error)
 	if building_id not in INTERNAL_BUILDINGS: return RuleResult.new(false,"Unknown internal building.")
 	var unit: GameState.Unit=state.units[spider_id]; var spider:=unit.spider_state
-	if unit.moved: return RuleResult.new(false,"Construction cannot start after the spider moved.")
 	if not spider.has_slot(): return RuleResult.new(false,"All nine internal slots are occupied.")
 	if spider.construction!=null: return RuleResult.new(false,"Construction is already in progress.")
 	var config:=config_for(controller_id); var cost: Dictionary[String,int]={"food":config.internal_building_food_cost}
@@ -109,7 +112,6 @@ func queue_biological_production(controller_id: int,spider_id: int,recipe_id: St
 	var error:=_spider_error(controller_id,spider_id)
 	if not error.is_empty(): return RuleResult.new(false,error)
 	var unit: GameState.Unit=state.units[spider_id]; var spider:=unit.spider_state
-	if unit.moved: return RuleResult.new(false,"Biological production cannot start after the spider moved.")
 	var recipe:=state.registry.biological_recipe(recipe_id)
 	if recipe==null or recipe.branch_id!=spider.nursery_branch: return RuleResult.new(false,"Recipe does not belong to this nursery.")
 	if spider.nursery_jobs.size()>=config_for(controller_id).nursery_slot_count: return RuleResult.new(false,"Nursery storage is full.")
@@ -267,7 +269,6 @@ func start_spider_construction(controller_id: int,spider_id: int) -> RuleResult:
 	var error:=_spider_error(controller_id,spider_id)
 	if not error.is_empty(): return RuleResult.new(false,error)
 	var unit: GameState.Unit=state.units[spider_id]; var spider:=unit.spider_state
-	if unit.moved: return RuleResult.new(false,"Spider construction cannot start after moving.")
 	if spider.construction!=null: return RuleResult.new(false,"Construction is already in progress.")
 	var cost:=spider_cost(controller_id)
 	if not state.players[controller_id].can_afford(cost): return RuleResult.new(false,"Insufficient Silk.")
@@ -283,7 +284,7 @@ func deploy_spider(controller_id: int,spider_id: int,cell_id: int) -> RuleResult
 	if cell_id not in deployment_cells(controller_id,spider_id,"living_spider"): return RuleResult.new(false,"Choose a legal adjacent deployment cell.")
 	var unit:=_spawn_unit(controller_id,"living_spider",cell_id)
 	unit.spider_state.slot_limit=config_for(controller_id).internal_slot_count
-	state.living_migration.add_road(controller_id,cell_id)
+	state.living_migration.remove_road(controller_id,cell_id)
 	spider.construction=null
 	return RuleResult.new(true,"New spider deployed.")
 
@@ -360,6 +361,17 @@ func is_ant_connected(unit: GameState.Unit) -> bool:
 		if state.grid.distance(unit.cell_id,source.cell_id)<=range_limit: return true
 	return unit.cell_id in active_road_cells(unit.controller_id)
 
+func connected_cell_set(controller_id: int) -> Dictionary[int,bool]:
+	# Batch queries share sources and road connectivity across the entire army.
+	var connected: Dictionary[int,bool]={}
+	var config:=config_for(controller_id)
+	var bonus:=config.improved_connection_range_bonus if research.has_unlock_tag(controller_id,"migration_networks") else 0
+	for source: Dictionary in _connection_sources(controller_id):
+		var radius: int=(config.queen_connection_range if source.kind=="queen" else config.ant_hill_connection_range)+bonus
+		for cell_id: int in state.grid.get_cells_within_distance(source.cell_id,radius): connected[cell_id]=true
+	for cell_id: int in active_road_cells(controller_id): connected[cell_id]=true
+	return connected
+
 func try_consume_corpse(controller_id: int,ant_id: int,corpse_id: int) -> RuleResult:
 	var error:=RuleAuthority.actor_error(state,controller_id)
 	if not error.is_empty(): return RuleResult.new(false,error)
@@ -409,8 +421,9 @@ func economic_summary(controller_id: int) -> Dictionary:
 		if unit.spider_state!=null and unit.upkeep_paid:
 			var config:=config_for(controller_id)
 			production.food=production.get("food",0)+config.spider_food_production
-			production.silk=production.get("silk",0)+config.spider_silk_production
-			production.food=production.get("food",0)+unit.spider_state.building_count("food_production")*config.food_per_food_building
+			production.silk=production.get("silk",0)+config.spider_silk_production+(config.improved_spider_silk_bonus if research.has_unlock_tag(controller_id,"silk_glands") else 0)
+			var food_per:=config.food_per_food_building+(config.improved_food_building_bonus if research.has_unlock_tag(controller_id,"abundant_organs") else 0)
+			production.food=production.get("food",0)+unit.spider_state.building_count("food_production")*food_per
 			var synapse_per:=config.synapse_per_synapse_building+(config.improved_synapse_building_bonus if research.has_unlock_tag(controller_id,"synapse_improvement") else 0)
 			production.synapse=production.get("synapse",0)+unit.spider_state.building_count("synapse_production")*synapse_per
 	return {"production":production,"upkeep":upkeep,"unpaid":state.living_migration.unpaid_upkeep.get(controller_id,{})}
@@ -428,9 +441,10 @@ func _expose_diseases(controller_id: int) -> void:
 			target.active_disease=DiseaseState.new(disease.id,disease.duration_turns,controller_id,disease.damage_per_turn,disease.attack_damage_reduction)
 
 func _update_disconnection(controller_id: int) -> void:
+	var connected:=connected_cell_set(controller_id)
 	for unit: GameState.Unit in _owned_units(controller_id):
 		if "ant" not in state.registry.unit(unit.definition_id).tags: continue
-		unit.disconnected_turns=0 if is_ant_connected(unit) else unit.disconnected_turns+1
+		unit.disconnected_turns=0 if "connection_independent" in state.registry.unit(unit.definition_id).tags or connected.has(unit.cell_id) else unit.disconnected_turns+1
 
 func _retreat(unit: GameState.Unit) -> void:
 	var targets:=active_road_cells(unit.controller_id)
@@ -442,7 +456,8 @@ func _retreat(unit: GameState.Unit) -> void:
 	var active_roads:=active_road_cells(unit.controller_id)
 	for cell: PlanetCell in state.grid.cells:
 		if state.is_cell_blocked(cell.id,unit.id) or (road_bound and cell.id!=unit.cell_id and cell.id not in active_roads): blocked[cell.id]=true
-	var traversal:=state.grid.breadth_first(unit.cell_id,unit.movement,blocked)
+	var cliff_edges: Dictionary=state.terrain.blocked_edges if state.terrain!=null and "flying" not in state.registry.unit(unit.definition_id).tags else {}
+	var traversal:=state.grid.breadth_first(unit.cell_id,unit.movement,blocked,cliff_edges)
 	var best:=unit.cell_id; var best_distance:=_distance_to_any(unit.cell_id,targets)
 	for cell_id: int in traversal.order:
 		var distance:=_distance_to_any(cell_id,targets)
@@ -475,6 +490,15 @@ func _owned_units(controller_id: int) -> Array[GameState.Unit]:
 		if unit.controller_id==controller_id: result.append(unit)
 	result.sort_custom(func(a: GameState.Unit,b: GameState.Unit)->bool: return a.id<b.id)
 	return result
+
+func _has_spider_at(cell_id: int) -> bool:
+	for unit: GameState.Unit in state.units.values():
+		if unit.spider_state!=null and unit.cell_id==cell_id and unit.hp>0: return true
+	return false
+
+func _cleanup_spider_roads() -> void:
+	for unit: GameState.Unit in state.units.values():
+		if unit.spider_state!=null: state.living_migration.remove_road(unit.controller_id,unit.cell_id)
 
 func _spider_error(controller_id: int,spider_id: int) -> String:
 	var error:=RuleAuthority.actor_error(state,controller_id)

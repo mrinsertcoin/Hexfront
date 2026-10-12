@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="ModelVisualDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/view/model_visual_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "knight_of_the_land"
+model_path = "res://assets/neutral/village/knight/source/knight.glb"
+model_scale = Vector3(0.55, 0.55, 0.55)
+rotation_offset_degrees = Vector3(0, 180, 0)
+notes = "Supplied Knight model. Single elite guardian; ground-origin correction and imported LODs are preserved."

@@ -11,11 +11,6 @@ func make_state(setup: Dictionary={}) -> GameState:
 	config.merge(setup,true)
 	return GameState.new(PlanetGrid.new(2),config)
 
-func enter_combat(rules: GameRules) -> void:
-	check(rules.try_end_turn(1).success,"P1 management ends")
-	check(rules.try_end_turn(2).success,"P2 management ends")
-	check(rules.state.turn_state.phase==TurnState.COMBAT_PLANNING,"Combat planning follows all management turns")
-
 func test_roads_larvae_squads() -> void:
 	var state:=make_state(); var rules:=GameRules.new(state); var worker: GameState.Unit=state.units[2]
 	var destination:=-1
@@ -49,19 +44,19 @@ func combat_pair() -> Array:
 
 func test_simultaneous_combat() -> void:
 	var setup:=combat_pair(); var state: GameState=setup[0]; var rules: GameRules=setup[1]; var a: GameState.Unit=setup[2]; var b: GameState.Unit=setup[3]
-	a.hp=b.attack_damage; b.hp=a.attack_damage; enter_combat(rules)
-	check(rules.submit_combat_intent(1,a.id,"attack",b.id).success and rules.submit_combat_intent(2,b.id,"attack",a.id).success,"Both players submit attacks concurrently")
-	check(rules.lock_combat(1).success and state.units.has(a.id) and state.units.has(b.id),"First lock does not resolve early")
-	check(rules.lock_combat(2).success and not state.units.has(a.id) and not state.units.has(b.id),"Pre-resolution snapshot permits mutual kill")
+	a.hp=b.attack_damage; b.hp=a.attack_damage
+	check(rules.submit_combat_intent(1,a.id,"attack",b.id).success and rules.try_end_turn(1).success,"P1 queues attack during movement")
+	check(rules.submit_combat_intent(2,b.id,"attack",a.id).success,"P2 queues attack during movement")
+	check(rules.try_end_turn(2).success and not state.units.has(a.id) and not state.units.has(b.id),"Ending final movement phase automatically permits mutual kill")
 
-	setup=combat_pair(); state=setup[0]; rules=setup[1]; a=setup[2]; b=setup[3]; enter_combat(rules)
-	var before:=b.hp; rules.submit_combat_intent(1,a.id,"attack",b.id); rules.submit_combat_intent(2,b.id,"dodge")
-	rules.lock_combat(1); rules.lock_combat(2)
+	setup=combat_pair(); state=setup[0]; rules=setup[1]; a=setup[2]; b=setup[3]
+	var before:=b.hp; rules.submit_combat_intent(1,a.id,"attack",b.id); rules.try_end_turn(1); rules.submit_combat_intent(2,b.id,"dodge")
+	rules.try_end_turn(2)
 	check(b.hp==before-maxi(0,a.attack_damage-state.registry.combat_option("dodge").damage_reduction),"Dodge applies data-defined reduction")
 
-	setup=combat_pair(); state=setup[0]; rules=setup[1]; a=setup[2]; b=setup[3]; enter_combat(rules)
-	var a_before:=a.hp; var b_before:=b.hp; rules.submit_combat_intent(1,a.id,"attack",b.id); rules.submit_combat_intent(2,b.id,"counter")
-	rules.lock_combat(1); rules.lock_combat(2)
+	setup=combat_pair(); state=setup[0]; rules=setup[1]; a=setup[2]; b=setup[3]
+	var a_before:=a.hp; var b_before:=b.hp; rules.submit_combat_intent(1,a.id,"attack",b.id); rules.try_end_turn(1); rules.submit_combat_intent(2,b.id,"counter")
+	rules.try_end_turn(2)
 	check(b.hp==b_before-maxi(0,a.attack_damage-2) and a.hp==a_before-2 and b.counter_cooldown_remaining==2,"Counter blocks, retaliates, and starts cooldown")
 
 func _init() -> void:

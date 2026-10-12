@@ -3,7 +3,8 @@
 [resource]
 script = ExtResource("1")
 id = "lm_migration_efficiency"
-display_name = "Migration Efficiency (Provisional)"
+display_name = "Migration Efficiency"
+description = "Living Spiders mature a Mite every two rounds instead of every three."
 research_cost = 6
 prerequisite_ids = PackedStringArray("lm_symbiotic_foundations")
 unlock_tags = PackedStringArray("improved_mite_interval")

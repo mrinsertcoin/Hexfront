@@ -40,7 +40,7 @@ func _run() -> void:
 	var mapping := VisualMap.new()
 	var validation := mapping.validation_errors()
 	check(validation.is_empty(), "Model visual registry must validate: " + "; ".join(validation))
-	check(mapping.registered_model_ids().size() == 12, "Every discovered Swarm GLB has one visual profile")
+	check(mapping.registered_model_ids().size() == 14, "Swarm models and both supplied village defenders have visual profiles")
 	var registry := ContentRegistry.default()
 	var faction := registry.faction("living_migration")
 	check(faction != null, "Living Migration content exists")
@@ -59,6 +59,23 @@ func _run() -> void:
 			var instance := packed.instantiate()
 			check(instance != null, "Mapped asset instantiates for " + unit_id)
 			if instance != null:
+				var meshes:=instance.find_children("*","MeshInstance3D",true,false)
+				if not meshes.is_empty():
+					var mesh:=meshes[0] as MeshInstance3D
+					var source:=mesh.get_active_material(0) as BaseMaterial3D
+					var original_color:=source.albedo_color; var original_metallic:=source.metallic
+					TacticalModelMaterials.apply(instance)
+					var adjusted:=mesh.get_active_material(0) as BaseMaterial3D
+					check(adjusted!=source and adjusted.metallic==0.0 and adjusted.metallic_specular<=0.25,"Biological model uses a restrained matte presentation")
+					check(source.albedo_color==original_color and source.metallic==original_metallic,"Presentation never mutates the imported material")
+					check(adjusted.albedo_texture==source.albedo_texture and adjusted.albedo_color.a==source.albedo_color.a,"Authored textures and transparency are preserved")
+					TacticalModelMaterials.apply(instance)
+					check(mesh.get_active_material(0)==adjusted,"Repeated material setup is idempotent")
+					var second:=packed.instantiate()
+					TacticalModelMaterials.apply(second)
+					var second_mesh:=second.find_children("*","MeshInstance3D",true,false)[0] as MeshInstance3D
+					check(second_mesh.get_active_material(0)==adjusted,"Multiple units reuse a cached material rather than duplicating textures")
+					second.free()
 				if unit_id == "living_spider":
 					check(contains_skeleton(instance), "Living Spider imported armature is preserved")
 				instance.free()

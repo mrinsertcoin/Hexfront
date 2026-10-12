@@ -48,7 +48,7 @@ func _run() -> void:
 		board.game_state.structures[100].cell_id = id
 		board._sync_units()
 		for entity_id in [1, 100]:
-			check(board.unit_views[entity_id].basis.y.dot(board.grid.get_cell(id).up) > 0.99999, "Unit and HQ local up radial")
+			check(board.unit_views[entity_id].basis.y.dot(board.terrain_surface.ground_normal(board.grid.get_cell(id).up)) > 0.999, "Ground unit and HQ align with the actual surface")
 			check(board.unit_views[entity_id].position.length() > board.planet_radius, "Visual offset preserved")
 	board.restart_match()
 	for id: int in [0, board.game_state.units[1].cell_id, board.game_state.structures[101].cell_id]:

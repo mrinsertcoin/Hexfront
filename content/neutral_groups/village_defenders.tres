@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="NeutralGroupDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/neutral_group_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "village_defenders"
+display_name = "Village Defenders"
+composition = {"knight_of_the_land": 1, "villager": 2}
+relationship_policy = "neutral"
+spawn_tags = PackedStringArray("guardian", "village")
+difficulty = 3
+awareness_range = 4
+leash_distance = 5
+site_guardian = true
+neutral_allegiance_id = "free_villages"

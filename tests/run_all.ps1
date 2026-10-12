@@ -13,7 +13,7 @@ if ($LASTEXITCODE -ne 0 -or $importOutput -match '(?m)^(SCRIPT ERROR:|ERROR:)') 
     throw 'Godot import failed.'
 }
 Write-Output 'PASS import/parse'
-foreach ($suite in @('planet_grid','planet_world','hydrology','world_ui','terrain','world_dressing','smoke','camera_navigation','music','frontend','frontend_navigation','content_foundation','world_interaction','world_population','living_migration','living_migration_ui','baumeister','baumeister_ui','strategic_ui','visibility','multiplayer','ffa','ffa_performance','balance','movement','hotseat','combat','milestone21','combat_ui','economy','economy_ui','ai','resources','model_assets','animation')) {
+foreach ($suite in @('planet_grid','planet_world','hydrology','world_ui','terrain','world_dressing','planet_performance','terraces','village_flatlands','smoke','camera_navigation','music','frontend','frontend_navigation','mythic_frames','content_foundation','world_interaction','world_population','living_migration','living_migration_ui','baumeister','baumeister_ui','strategic_ui','research_roots','overlay_ux','visibility','multiplayer','ffa','ffa_performance','balance','movement','hotseat','combat','milestone21','milestone22','bugfix_ux_pass','combat_ui','economy','economy_ui','ai','resources','model_assets','animation')) {
     # Watchdog prevents an aborted async test from hanging forever.
     # Exit code alone is insufficient: Godot can return 0 after a script error.
     $output = & $GodotExecutable --headless --path $projectDirectory --script "res://tests/$suite.gd" --quit-after 5000 2>&1 | Out-String

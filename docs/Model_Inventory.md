@@ -45,7 +45,11 @@ Statistics come from `tools/inspect_swarm_models.gd` after Godot import. Triangl
 
 All twelve GLBs contain one mesh and one material. The imported materials and textures are preserved; team identity remains on the existing external ownership ring instead of overwriting authored PBR materials. No animation clips were found, so Milestone 21A does not add or fabricate animation.
 
+The viewing correction pass found these biological imports used metallic strength 1.0, producing conspicuous reflections against the muted terrain. `TacticalModelMaterials` now supplies cached instance overrides with zero metallic strength, restrained specular response, modest neutral albedo attenuation and reduced normal intensity. Imported resources and textures remain unchanged, and squads/previews share the overrides. Preview key/fill lighting is softer; ownership rings are thinner and slightly subdued, and world HP bars use a calmer green. No extra rendering passes are added. `tools/inspect_model_materials.gd` reproduces the source audit; `tests/model_assets.gd` verifies source isolation, texture sharing and cache reuse.
+
 ## Validation and review workflow
+
+Village defender profiles additionally map the supplied `villager/source/villager.glb` and `knight/source/knight.glb` under `assets/neutral/village/`. Villager source geometry has 31,184 triangles with imported LODs down to 618; Knight geometry has 164,894 with LODs down to 1,288. The board uses the existing LOD bias, shared materials and compressed 1024-pixel textures, preserving the originals. Villagers render as seven distinct members at 0.58 model scale; the single Knight uses 0.55 scale and ground-origin correction. `tests/village_defenders_graphical.gd` captures both models and their previews.
 
 - `tests/model_assets.gd` rejects missing profiles, duplicate IDs, broken model paths, failed instantiation, accidental gameplay IDs, and changed roster mappings.
 - `tests/swarm_models_graphical.gd` builds a normal spherical match, places all 15 roster units together, checks profile transforms, radial placement, ownership markers, movement compatibility, removal and respawn, and saves `.godot/21a_swarm_roster.png`.

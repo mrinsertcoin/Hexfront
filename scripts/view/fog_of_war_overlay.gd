@@ -6,6 +6,7 @@ var mesh_instance:=MeshInstance3D.new()
 var last_revision: int=-1
 var last_team_id: int=-1
 var omniscient: bool=false
+var _last_omniscient: bool=false
 var build_ms: float=0.0
 var geometry_build_ms: float=0.0
 var _vertices:=PackedVector3Array()
@@ -29,7 +30,8 @@ func _init() -> void:
 func update_observation(grid: PlanetGrid,surface: TerrainSurfaceSampler,observation: TeamObservation,force: bool=false) -> void:
 	var geometry_changed:=_cached_grid_fingerprint!=grid.fingerprint or _cached_surface!=surface
 	if geometry_changed: _build_geometry(grid,surface)
-	if not force and not geometry_changed and last_revision==observation.revision and last_team_id==observation.team_id: return
+	if not force and not geometry_changed and last_revision==observation.revision and last_team_id==observation.team_id and _last_omniscient==omniscient: return
+	_last_omniscient=omniscient
 	last_revision=observation.revision; last_team_id=observation.team_id
 	var started:=Time.get_ticks_usec()
 	if omniscient:
@@ -65,4 +67,4 @@ func _cache_triangle(a: Vector3,b: Vector3,c: Vector3,cell_id: int,surface: Terr
 		_cache_triangle(ca,bc,c,cell_id,surface); _cache_triangle(ab,bc,ca,cell_id,surface)
 		return
 	for direction: Vector3 in [a,c,b]:
-		_vertices.append(surface.sample_position(direction,0.085)); _normals.append(direction); _vertex_cells.append(cell_id)
+		_vertices.append(surface.sample_cell_position(cell_id,direction,0.085)); _normals.append(direction); _vertex_cells.append(cell_id)

@@ -8,18 +8,19 @@ class Result extends RuleResult:
 var state: GameState
 var movement_rules: MovementRules
 var combat_rules: CombatRules
-var combat_planning_rules: CombatPlanningRules
+var combat_order_rules: CombatOrderRules
 var research_rules: ResearchRules
 var recruitment_rules: RecruitmentRules
 var site_rules: SiteRules
 var living_migration_rules: LivingMigrationRules
 var baumeister_rules: BaumeisterRules
+var started_hook_rounds: Dictionary[int,int]={}
 
 func _init(game_state: GameState) -> void:
 	state=game_state
 	movement_rules=MovementRules.new(state)
 	combat_rules=CombatRules.new(state)
-	combat_planning_rules=CombatPlanningRules.new(state)
+	combat_order_rules=CombatOrderRules.new(state)
 	research_rules=ResearchRules.new(state)
 	living_migration_rules=LivingMigrationRules.new(state,research_rules)
 	movement_rules.capability_rules=living_migration_rules
@@ -28,6 +29,7 @@ func _init(game_state: GameState) -> void:
 	recruitment_rules=RecruitmentRules.new(state,research_rules)
 	recruitment_rules.capability_rules=baumeister_rules
 	site_rules=SiteRules.new(state,research_rules)
+	_start_stage()
 
 func _wrap(source: RuleResult) -> Result:
 	var result:=Result.new(source.success,source.reason,source.path)
@@ -53,22 +55,18 @@ func preview_attack(actor: int,attacker_id: int,target_id: int) -> Result:
 	return _wrap(combat_rules.preview_attack(actor,attacker_id,target_id))
 
 func attack_targets(actor: int,attacker_id: int) -> Array[int]:
-	if state.turn_state.phase==TurnState.COMBAT_PLANNING: return combat_planning_rules.attack_targets(actor,attacker_id)
+	if state.turn_state.simultaneous_combat_enabled and not state.turn_state.neutral_phase: return combat_order_rules.attack_targets(actor,attacker_id)
 	return combat_rules.attack_targets(actor,attacker_id)
 
 func try_attack(actor: int,attacker_id: int,target_id: int) -> Result:
-	if state.turn_state.neutral_phase or not state.turn_state.combat_planning_enabled: return _commit(combat_rules.try_attack(actor,attacker_id,target_id))
+	if not state.turn_state.simultaneous_combat_enabled or (state.turn_state.neutral_phase and not state.turn_state.simultaneous_player_turns_enabled): return _commit(combat_rules.try_attack(actor,attacker_id,target_id))
 	return submit_combat_intent(actor,attacker_id,"attack",target_id)
 
 func submit_combat_intent(actor: int,unit_id: int,option_id: String,target_id: int=-1) -> Result:
-	return _commit(combat_planning_rules.submit_intent(actor,unit_id,option_id,target_id))
+	return _commit(combat_order_rules.submit_intent(actor,unit_id,option_id,target_id))
 
-func lock_combat(actor: int) -> Result:
-	var before_round:=state.round_number
-	var result:=combat_planning_rules.lock_player(actor)
-	if result.success and state.round_number>before_round:
-		state.process_round_boundary(); living_migration_rules.process_round_start()
-	return _commit(result)
+func clear_combat_intent(actor: int,unit_id: int) -> Result:
+	return _commit(combat_order_rules.clear_intent(actor,unit_id))
 
 func recruit_error(actor: int,headquarters_id: int,unit_id: String) -> String:
 	return recruitment_rules.recruit_error(actor,headquarters_id,unit_id)
@@ -107,28 +105,57 @@ func try_end_turn(actor: int) -> Result:
 	if not error.is_empty(): return Result.new(false,error)
 	living_migration_rules.end_turn(actor)
 	baumeister_rules.end_turn(actor)
-	state.advance_turn()
-	if state.turn_state.phase==TurnState.COMBAT_PLANNING:
-		state.combat_planning.reset()
-		return Result.new(true,"Simultaneous combat planning.")
-	living_migration_rules.start_turn(state.active_player); baumeister_rules.start_turn(state.active_player)
-	return Result.new(true,"Player %d's turn." % state.active_player)
+	state.advance_turn(actor)
+	if state.turn_state.phase==TurnState.COMBAT_RESOLUTION:
+		return resolve_combat_phase()
+	_start_stage()
+	if state.turn_state.simultaneous_player_turns_enabled and state.turn_state.simultaneous_stage_started:
+		var remaining:=0
+		for player_id: int in state.turn_state.simultaneous_player_ids(): remaining+=int(state.turn_state.can_act(player_id))
+		return Result.new(true,"Player %d movement complete. Waiting for %d player%s." % [actor,remaining,"" if remaining==1 else "s"])
+	return Result.new(true,"Player %d movement phase complete. Player %d movement phase." % [actor,state.active_player])
+
+func resolve_combat_phase() -> Result:
+	if state.turn_state.phase!=TurnState.COMBAT_RESOLUTION: return Result.new(false,"Combat resolution is not active.")
+	var had_intents:=not state.combat_orders.intents.is_empty()
+	var outcomes:=combat_order_rules.resolve_pending_combat()
+	var combat_summary: String
+	if had_intents:
+		combat_summary="Combat resolved (%d outcome%s). " % [outcomes.size(),"" if outcomes.size()==1 else "s"]
+	else:
+		combat_summary="No combat orders; combat skipped. "
+	if state.turn_state.neutral_phase and state.turn_state.simultaneous_player_turns_enabled:
+		state.process_round_boundary(); living_migration_rules.process_round_start(); state.prepare_neutral_actions()
+	elif state.turn_state.phase==TurnState.MANAGEMENT:
+		state.process_round_boundary(); living_migration_rules.process_round_start(); _start_stage()
+		return Result.new(true,combat_summary+"Round %d. Player %d movement phase." % [state.round_number,state.active_player])
+	return Result.new(true,combat_summary+"Neutral activity begins.")
 
 func finish_neutral_phase() -> Result:
 	if not state.turn_state.neutral_phase: return Result.new(false,"Neutral activity is not in progress.")
+	if not state.turn_state.simultaneous_player_turns_enabled: state.combat_orders.intents.clear()
 	state.advance_turn()
-	living_migration_rules.process_round_start()
-	living_migration_rules.start_turn(state.active_player)
-	baumeister_rules.start_turn(state.active_player)
-	return Result.new(true,"Player %d's turn." % state.active_player)
+	if not state.turn_state.simultaneous_player_turns_enabled: living_migration_rules.process_round_start()
+	_start_stage()
+	return Result.new(true,"Round %d. Player %d movement phase." % [state.round_number,state.active_player])
 
 func restart_match() -> void:
 	state.reset_match()
-	living_migration_rules.start_turn(state.active_player)
-	baumeister_rules.start_turn(state.active_player)
+	started_hook_rounds.clear(); _start_stage()
 
 func _start_turn() -> void:
+	_start_stage()
+
+func _start_stage() -> void:
 	state.start_turn()
+	if state.turn_state.phase!=TurnState.MANAGEMENT: return
+	var controller_ids: Array[int]=[]
+	if state.turn_state.simultaneous_player_turns_enabled and state.turn_state.simultaneous_stage_started: controller_ids=state.turn_state.simultaneous_player_ids()
+	else: controller_ids.append(state.active_player)
+	for controller_id: int in controller_ids:
+		if int(started_hook_rounds.get(controller_id,0))==state.round_number: continue
+		started_hook_rounds[controller_id]=state.round_number
+		living_migration_rules.start_turn(controller_id); baumeister_rules.start_turn(controller_id)
 
 func start_research(player_id: int,technology_id: String) -> Result:
 	return _wrap(research_rules.start_research(player_id,technology_id))

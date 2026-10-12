@@ -3,7 +3,7 @@
 [resource]
 script = ExtResource("1")
 id = "lm_symbiotic_foundations"
-display_name = "Symbiotic Foundations (Provisional)"
-description = "Development root for research and the first mite disease."
+display_name = "Symbiotic Foundations"
+description = "The first root: unlocks Tracking disease and shortens nursery development by one round."
 research_cost = 4
 unlock_tags = PackedStringArray("disease_tracking", "nursery_improvements")

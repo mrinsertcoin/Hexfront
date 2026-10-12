@@ -5,6 +5,7 @@ extends RefCounted
 const TRADE:="trade"
 const GATHER:="gather"
 const EXPLORE:="explore"
+const CLAIM_LOOT:="claim_loot"
 
 var state: GameState
 var research_rules: ResearchRules
@@ -31,6 +32,13 @@ func available_interactions(actor: int,site_id: int) -> Array[Dictionary]:
 	var definition:=state.registry.world_site(site.definition_id)
 	if definition==null or not definition.interactable: return result
 	var unit:=_adjacent_unit(actor,site.cell_id)
+	if definition.category=="village" and site.runtime_state.get("destroyed",false):
+		if site.runtime_state.get("loot_available",false) and not site.runtime_state.get("loot_claimed",false):
+			result.append({"id":CLAIM_LOOT,"type":CLAIM_LOOT,"label":"Claim Village Loot","unit_id":unit.id if unit!=null else -1,
+				"cost":{},"reward":_compatible_rewards(actor,definition.loot_resources),
+				"error":interaction_error(actor,site_id,CLAIM_LOOT,unit.id if unit!=null else -1)})
+		return result
+	if definition.category=="village" and state.relationship_for_site(actor,site)==RelationshipState.Kind.HOSTILE: return result
 	if definition.interaction_type==TRADE:
 		for recipe_id: String in definition.trade_recipe_ids:
 			var recipe:=state.registry.trade_recipe(recipe_id)
@@ -59,6 +67,13 @@ func interaction_error(actor: int,site_id: int,interaction_id: String,unit_id: i
 	if unit==null or unit.controller_id!=actor: return "Move one of your units next to the site."
 	if unit.attacked: return "This unit already used its action."
 	if state.grid.distance(unit.cell_id,site.cell_id)>1: return "The unit must be adjacent to the site."
+	if definition.category=="village" and site.runtime_state.get("destroyed",false):
+		if interaction_id!=CLAIM_LOOT: return "Destroyed villages cannot trade."
+		if site.runtime_state.get("loot_claimed",false) or not site.runtime_state.get("loot_available",false): return "This village's loot has already been claimed."
+		if _compatible_rewards(actor,definition.loot_resources).is_empty() and definition.loot_research_progress<=0: return "This village has no useful loot for your faction."
+		return ""
+	if definition.category=="village" and state.relationship_for_site(actor,site)==RelationshipState.Kind.HOSTILE:
+		return "This village is hostile and will not trade."
 	if definition.interaction_type==TRADE:
 		var recipe:=state.registry.trade_recipe(interaction_id)
 		if recipe==null or interaction_id not in definition.trade_recipe_ids: return "That trade is not offered here."
@@ -83,7 +98,13 @@ func try_interact(actor: int,site_id: int,interaction_id: String,unit_id: int=-1
 	var definition:=state.registry.world_site(site.definition_id)
 	var player: PlayerState=state.players[actor]
 	var message:="Interaction completed."
-	if definition.interaction_type==TRADE:
+	if interaction_id==CLAIM_LOOT:
+		var reward:=_compatible_rewards(actor,definition.loot_resources); player.add_resources(reward)
+		if definition.loot_research_progress>0 and not player.research.current_technology_id.is_empty():
+			research_rules.add_research_progress(actor,definition.loot_research_progress)
+		site.runtime_state.loot_claimed=true; site.runtime_state.loot_available=false; site.runtime_state.loot_claimed_by=actor
+		message="Village loot claimed."
+	elif definition.interaction_type==TRADE:
 		var recipe:=state.registry.trade_recipe(interaction_id)
 		player.apply_cost(recipe.input_costs); player.add_resources(recipe.output_rewards)
 		var usage: Dictionary=site.runtime_state.get("trade_usage",{})

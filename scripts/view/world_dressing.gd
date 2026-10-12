@@ -14,6 +14,7 @@ var batch_variants: Dictionary[String,String]={}
 var batch_lods: Dictionary[String,int]={}
 var batch_transforms: Dictionary[String,Array]={}
 var batch_directions: Dictionary[String,Array]={}
+var batch_cells: Dictionary[String,PackedInt32Array]={}
 var placements: Array[Dictionary]=[]
 var visual_fingerprint: String=""
 var build_ms: float=0.0
@@ -24,12 +25,19 @@ var last_visibility_team: int=-1
 var last_visibility_omniscient: bool=false
 var _lake_zones: Array[Vector4]=[]
 var _river_zones: Array[Vector4]=[]
+var _zoom_band: String=""
+var _sector_directions: Array[Vector3]=[]
 
 func rebuild(planet: GeneratedPlanet,terrain: TerrainSurfaceSampler,settings: WorldDressingConfig) -> void:
 	var started:=Time.get_ticks_usec()
 	for child: Node in get_children(): child.free()
 	world=planet; surface=terrain; config=settings.duplicate(true)
-	instance_counts.clear(); variant_counts.clear(); instances.clear(); batch_variants.clear(); batch_lods.clear(); batch_transforms.clear(); batch_directions.clear(); placements.clear()
+	instance_counts.clear(); variant_counts.clear(); instances.clear(); batch_variants.clear(); batch_lods.clear(); batch_transforms.clear(); batch_directions.clear(); batch_cells.clear(); placements.clear()
+	_zoom_band=""
+	_sector_directions.clear()
+	var sector_grid:=PlanetGrid.new(0)
+	for face: Vector3i in sector_grid._faces:
+		_sector_directions.append((sector_grid.cells[face.x].up+sector_grid.cells[face.y].up+sector_grid.cells[face.z].up).normalized())
 	last_visibility_revision=-1; last_visibility_team=-1; last_visibility_omniscient=false
 	_lake_zones.clear(); _river_zones.clear(); visual_fingerprint=""
 	assert(config.validate().is_empty(),"Invalid world dressing settings")
@@ -59,10 +67,10 @@ func rebuild(planet: GeneratedPlanet,terrain: TerrainSurfaceSampler,settings: Wo
 		var y:=direction_rng.randf_range(-1.0,1.0)
 		var azimuth:=direction_rng.randf_range(0.0,TAU)
 		var center:=Vector3(sqrt(maxf(0.0,1.0-y*y))*cos(azimuth),y,sqrt(maxf(0.0,1.0-y*y))*sin(azimuth))
+		var fields:=world.sample_fields(center)
 		for definition: DressingDefinition in config.definitions:
 			var rng:=RandomNumberGenerator.new()
 			rng.seed=PlanetFieldSampler.derive_seed(world.config.world_seed,"world_dressing/%s/%d" % [definition.definition_id,candidate])
-			var fields:=world.sample_fields(center)
 			if rng.randf()>=_density(definition,fields,center): continue
 			var member_count:=rng.randi_range(definition.minimum_cluster_instances,definition.maximum_cluster_instances)
 			var accepted:=0
@@ -72,7 +80,6 @@ func rebuild(planet: GeneratedPlanet,terrain: TerrainSurfaceSampler,settings: Wo
 				var distance:=sqrt(rng.randf())*definition.cluster_radius
 				var offset:=(tangent.x*cos(angle)+tangent.z*sin(angle))*distance
 				var direction:=(center*world.grid_reference.planet_radius+offset).normalized()
-				var data:=world.sample_fields(direction)
 				var normal:=surface.sample_normal(direction)
 				var slope:=rad_to_deg(acos(clampf(normal.dot(direction),-1.0,1.0)))
 				var lake:=_inside_zone(direction,_lake_zones)
@@ -95,7 +102,18 @@ func rebuild(planet: GeneratedPlanet,terrain: TerrainSurfaceSampler,settings: Wo
 	for id: String in resolved:
 		var variant: DressingMeshVariant=catalog[id]
 		variant_counts[id]=transforms[id].size()
-		for lod in range(3): _create_batch(variant,lod,resolved[id][lod].mesh,transforms[id],directions[id])
+		# Each globe-wide MultiMesh previously had globe-wide bounds: even a
+		# close camera submitted every tree. Small spatial batches can be culled.
+		var sectors: Dictionary[int,Array]={}; var sector_directions: Dictionary[int,Array]={}
+		for index in range(transforms[id].size()):
+			var direction: Vector3=directions[id][index]; var sector:=0; var score:=-INF
+			for candidate in range(_sector_directions.size()):
+				var dot:=direction.dot(_sector_directions[candidate])
+				if dot>score: sector=candidate; score=dot
+			if not sectors.has(sector): sectors[sector]=[]; sector_directions[sector]=[]
+			sectors[sector].append(transforms[id][index]); sector_directions[sector].append(direction)
+		for sector: int in sectors:
+			for lod in range(3): _create_batch(variant,lod,resolved[id][lod].mesh,sectors[sector],sector_directions[sector],sector)
 	set_zoom_band("TACTICAL")
 	visual_fingerprint=_fingerprint()
 	build_ms=(Time.get_ticks_usec()-started)/1000.0
@@ -156,10 +174,10 @@ func _inside_zone(direction: Vector3,zones: Array[Vector4]) -> bool:
 		if direction.dot(Vector3(zone.x,zone.y,zone.z))>=zone.w: return true
 	return false
 
-func _create_batch(variant: DressingMeshVariant,lod: int,mesh: Mesh,source: Array,directions: Array) -> void:
+func _create_batch(variant: DressingMeshVariant,lod: int,mesh: Mesh,source: Array,directions: Array,sector: int) -> void:
 	var batch:=MultiMeshInstance3D.new()
-	var id:="%s/lod%d" % [variant.variant_id,lod]
-	batch.name=(variant.variant_id+"_lod%d" % lod).validate_node_name()
+	var id:="%s/sector%d/lod%d" % [variant.variant_id,sector,lod]
+	batch.name=(variant.variant_id+"_sector%d_lod%d" % [sector,lod]).validate_node_name()
 	var multimesh:=MultiMesh.new()
 	multimesh.transform_format=MultiMesh.TRANSFORM_3D; multimesh.instance_count=source.size(); multimesh.mesh=mesh
 	batch.multimesh=multimesh
@@ -175,18 +193,26 @@ func _create_batch(variant: DressingMeshVariant,lod: int,mesh: Mesh,source: Arra
 	multimesh.buffer=data
 	instances[id]=batch; batch_variants[id]=variant.variant_id; batch_lods[id]=lod
 	batch_transforms[id]=source.duplicate(); batch_directions[id]=directions.duplicate()
+	if lod==0:
+		var cells:=PackedInt32Array()
+		for direction: Vector3 in directions: cells.append(world.grid_reference.find_cell(direction))
+		batch_cells[id]=cells
+	else: batch_cells[id]=batch_cells["%s/sector%d/lod0" % [variant.variant_id,sector]]
 
 func apply_visibility(observation: TeamObservation,grid: PlanetGrid,omniscient: bool=false) -> void:
 	if last_visibility_revision==observation.revision and last_visibility_team==observation.team_id and last_visibility_omniscient==omniscient: return
 	last_visibility_revision=observation.revision; last_visibility_team=observation.team_id; last_visibility_omniscient=omniscient
 	for id: String in instances:
-		var transforms: Array=batch_transforms[id]; var directions: Array=batch_directions[id]
+		var transforms: Array=batch_transforms[id]; var cells: PackedInt32Array=batch_cells[id]
+		var visible_count:=0
 		for index in range(transforms.size()):
-			var transform: Transform3D=transforms[index]
-			var cell_id:=grid.find_cell(directions[index])
-			if not omniscient and not observation.is_explored(cell_id):
-				transform.basis=Basis().scaled(Vector3.ZERO)
-			instances[id].multimesh.set_instance_transform(index,transform)
+			var cell_id:=cells[index]
+			if not omniscient and not observation.is_explored(cell_id): continue
+			instances[id].multimesh.set_instance_transform(visible_count,transforms[index])
+			visible_count+=1
+		# Zero-scale instances still submitted all mesh indices to every pass.
+		# Compact permitted props into the visible prefix instead.
+		instances[id].multimesh.visible_instance_count=visible_count
 
 func _category_node(category: int) -> Node3D:
 	if category==DressingDefinition.Category.ROCK: return get_node("RockScatter")
@@ -194,6 +220,8 @@ func _category_node(category: int) -> Node3D:
 	return get_node("VegetationScatter")
 
 func set_zoom_band(band: String) -> void:
+	if band==_zoom_band: return
+	_zoom_band=band
 	var level:=0
 	if band=="REGIONAL": level=1
 	elif band=="STRATEGIC": level=2

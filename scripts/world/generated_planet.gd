@@ -7,6 +7,7 @@ var grid_reference: PlanetGrid
 var cell_world_data: Array[PlanetWorldCellData] = []
 var regions: Array[PlanetRegionData] = []
 var hydrology: PlanetHydrology
+var terraces: TerracedTerrain
 var generation_fingerprint: String
 var generation_ms: float
 var validation_errors: PackedStringArray = []
@@ -24,6 +25,9 @@ static func generate(grid: PlanetGrid, recipe: PlanetGenerationConfig, log_summa
 	planet.config = recipe.duplicate(true) as PlanetGenerationConfig
 	planet._sampler = PlanetFieldSampler.new(planet.config)
 	planet._sample_cells()
+	if planet.config.terraced_terrain:
+		planet.terraces=TerracedTerrain.generate(grid,planet.config.world_seed,planet.config.cliff_generation)
+		for cell: PlanetWorldCellData in planet.cell_world_data: cell.height=float(planet.terraces.levels[cell.cell_id])/3.0
 	if planet.config.hydrology.enabled:
 		planet.hydrology = PlanetHydrology.generate(grid, planet.cell_world_data, planet.config.hydrology)
 		planet._apply_hydrology_climate()
@@ -71,6 +75,7 @@ func _apply_hydrology_climate() -> void:
 		cell.effective_moisture = clampf(cell.base_moisture + cell.hydrology.hydrology_moisture_bonus, 0.0, 1.0)
 
 func sample_height(direction: Vector3) -> float:
+	if terraces!=null: return terraces.height_at(direction)/(terraces.elevation_step*3.0)
 	return _sampler.sample_height(direction)
 
 func sample_temperature(direction: Vector3) -> float:
@@ -90,6 +95,7 @@ func sample_biome_weights(direction: Vector3) -> PackedFloat64Array:
 
 func sample_fields(direction: Vector3) -> PlanetWorldCellData:
 	var data: PlanetWorldCellData = _sampler.sample_fields(direction)
+	if terraces!=null: data.height=sample_height(direction)
 	if _climate_interpolator != null and hydrology != null:
 		var climate: Vector2 = _climate_interpolator.sample(direction)
 		data.hydrology = HydrologyCellData.new()
@@ -190,6 +196,7 @@ func validate(require_fingerprint: bool = true) -> PackedStringArray:
 func calculate_fingerprint() -> String:
 	var lines: PackedStringArray = ["hexfront-world-v%d" % config.world_generation_version,
 		grid_reference.fingerprint, JSON.stringify(config.to_dict(), "", true, true)]
+	if terraces!=null: lines.append("terraces:"+terraces.fingerprint)
 	for cell: PlanetWorldCellData in cell_world_data:
 		var values: PackedStringArray = [str(cell.cell_id), str(cell.region_id), cell.dominant_biome]
 		for value: float in cell.scalar_values():

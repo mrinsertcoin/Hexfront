@@ -36,7 +36,7 @@ func execute_actions(state: GameState,controller_id: int) -> Array[RuleResult]:
 		var action:=actions[index]
 		# Neutral controllers resolve as one authoritative phase. Domain rules still
 		# validate every command; visibility is refreshed once after the batch.
-		if action.type=="attack": results.append(rules.combat_rules.try_attack(controller_id,action.attacker,action.target))
+		if action.type=="attack": results.append(rules.try_attack(controller_id,action.attacker,action.target))
 		elif action.type=="move": results.append(rules.movement_rules.try_move(controller_id,action.unit,action.dest))
 	state.refresh_visibility()
 	return results
@@ -47,9 +47,9 @@ func _nearest_hostile(state: GameState,unit: GameState.Unit) -> RefCounted:
 	var traversal:=state.grid.breadth_first(unit.cell_id,unit.neutral_awareness_range)
 	var candidates: Array[RefCounted]=[]
 	for other: GameState.Unit in state.units.values():
-		if state.relationships.is_hostile(unit.controller_id,other.controller_id) and traversal.costs.has(other.cell_id): candidates.append(other)
+		if state.entities_are_hostile(unit,other) and traversal.costs.has(other.cell_id): candidates.append(other)
 	for structure: GameState.Structure in state.structures.values():
-		if state.relationships.is_hostile(unit.controller_id,structure.controller_id) and traversal.costs.has(structure.cell_id): candidates.append(structure)
+		if state.entities_are_hostile(unit,structure) and traversal.costs.has(structure.cell_id): candidates.append(structure)
 	candidates.sort_custom(func(a: RefCounted,b: RefCounted)->bool:
 		var da: int=traversal.costs[a.cell_id]; var db: int=traversal.costs[b.cell_id]
 		return da<db or (da==db and a.id<b.id))
@@ -78,6 +78,7 @@ func _wander_cell(state: GameState,rules: GameRules,unit: GameState.Unit) -> int
 	return allowed[(unit.id+state.round_number)%allowed.size()]
 
 func _inside_leash(state: GameState,unit: GameState.Unit,cell_id: int) -> bool:
+	if state.village_guard_home(unit)>=0: return state.village_guard_cells(unit).has(cell_id)
 	if unit.neutral_home_cell<0: return true
 	var key:=Vector2i(unit.neutral_home_cell,unit.neutral_leash_distance)
 	if not _leash_cells.has(key):

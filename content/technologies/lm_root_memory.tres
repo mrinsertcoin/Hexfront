@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="TechnologyDefinition" load_steps=2 format=3]
+[ext_resource type="Script" path="res://scripts/content/technology_definition.gd" id="1"]
+[resource]
+script = ExtResource("1")
+id = "lm_root_memory"
+display_name = "Root Memory"
+description = "Every internal Research organ contributes one additional research point per round."
+research_cost = 8
+prerequisite_ids = PackedStringArray("lm_synaptic_bloom")
+unlock_tags = PackedStringArray("root_memory")

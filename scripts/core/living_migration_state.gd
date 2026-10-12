@@ -18,6 +18,11 @@ func add_road(controller_id: int,cell_id: int) -> void:
 	if not roads.has(controller_id): roads[controller_id]={}
 	roads[controller_id][cell_id]=true
 
+func remove_road(controller_id: int,cell_id: int) -> void:
+	if not roads.has(controller_id): return
+	roads[controller_id].erase(cell_id)
+	if roads[controller_id].is_empty(): roads.erase(controller_id)
+
 func road_cells(controller_id: int) -> Array[int]:
 	var result: Array[int]=[]
 	for cell_id: int in roads.get(controller_id,{}).keys(): result.append(cell_id)

@@ -10,7 +10,31 @@ func _init(planet: GeneratedPlanet, settings: TerrainRenderConfig) -> void:
 	config = settings
 
 func radius_at(direction: Vector3) -> float:
+	if world.terraces!=null: return world.grid_reference.planet_radius+world.terraces.height_at(direction)
 	return world.grid_reference.planet_radius + config.mapped_height(world.sample_height(direction))
+
+func mapped_world_height(value: float) -> float:
+	return value*world.terraces.elevation_step*3.0 if world.terraces!=null else config.mapped_height(value)
+
+func sample_cell_position(cell_id: int,direction: Vector3,offset: float=0.0) -> Vector3:
+	var p:=direction.normalized()
+	if world.terraces!=null: return p*(world.grid_reference.planet_radius+world.terraces.height_at(p,cell_id)+offset)
+	return sample_position(p,offset)
+
+func ground_position(direction: Vector3,clearance: float=0.006) -> Vector3:
+	var p:=direction.normalized()
+	if picking_mesh!=null:
+		var maximum:=world.grid_reference.planet_radius+maxf(4.0,config.terrain_height_scale+2.0)
+		var hit: Dictionary=picking_mesh.intersect_ray(p*maximum,-p)
+		if not hit.is_empty(): return Vector3(hit.position)+Vector3(hit.normal).normalized()*clearance
+	return sample_position(p,clearance)
+
+func ground_normal(direction: Vector3) -> Vector3:
+	var p:=direction.normalized()
+	if picking_mesh!=null:
+		var hit: Dictionary=picking_mesh.intersect_ray(p*(world.grid_reference.planet_radius+6.0),-p)
+		if not hit.is_empty(): return Vector3(hit.normal).normalized()
+	return sample_normal(p)
 
 func sample_position(direction: Vector3, offset: float = 0.0) -> Vector3:
 	var p: Vector3 = PlanetFieldSampler.normalize_direction(direction)
@@ -28,7 +52,7 @@ func ray_hit(origin: Vector3, direction: Vector3) -> Vector3:
 	if not origin.is_finite() or not direction.is_finite() or direction.length_squared()<0.000001: return Vector3.ZERO
 	var ray: Vector3 = direction.normalized()
 	if origin.length() <= radius_at(origin): return Vector3.ZERO
-	if config.terrain_height_scale == 0.0:
+	if config.terrain_height_scale == 0.0 and world.terraces==null:
 		var b: float=origin.dot(ray)
 		var discriminant: float=b*b-origin.length_squared()+world.grid_reference.planet_radius*world.grid_reference.planet_radius
 		if discriminant<0 or -b-sqrt(discriminant)<0: return Vector3.ZERO

@@ -99,7 +99,6 @@ func _run() -> void:
 	board.set_process(false)
 	board._new_match("Vs AI")
 	board._ai_delay = 0.0
-	board.request_end_turn()
 	for frame in range(300):
 		for entity: EntityView in board.unit_views.values():
 			entity.advance_movement(100)

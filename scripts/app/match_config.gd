@@ -16,6 +16,8 @@ const SIZE_DEFINITIONS := {
 @export_enum("Human","AI") var opponent_controller: String="AI"
 @export var ai_difficulty: String="Standard"
 @export_enum("Off","Sparse","Standard","Dense") var world_population_preset: String=WorldPopulationConfig.STANDARD
+@export_range(0,4) var villages_per_player: int=2
+@export_enum("None","Rare","Low","Moderate","High","Experimental") var cliff_generation: String="Rare"
 @export var player_team_id: int=1
 @export var opponent_team_id: int=2
 ## Multiplayer assignments are primitive records and may grow to four players.
@@ -40,6 +42,7 @@ func size_definition() -> Dictionary:
 
 func validate(registry: ContentRegistry=ContentRegistry.default()) -> PackedStringArray:
 	var errors:=PackedStringArray()
+	if cliff_generation not in TerracedTerrain.CLIFF_PRESETS: errors.append("Choose a valid cliff generation preset.")
 	if not SIZE_DEFINITIONS.has(planet_size): errors.append("Choose a valid planet size.")
 	var player:=registry.faction(player_faction_id)
 	var opponent:=registry.faction(opponent_faction_id)
@@ -49,6 +52,7 @@ func validate(registry: ContentRegistry=ContentRegistry.default()) -> PackedStri
 	if opponent_controller not in ["Human","AI"]: errors.append("Choose a valid opponent controller.")
 	if ai_difficulty!="Standard": errors.append("Choose a supported AI difficulty.")
 	if world_population_preset not in WorldPopulationConfig.PRESETS: errors.append("Choose a valid world population density.")
+	if villages_per_player<0 or villages_per_player>4: errors.append("Choose zero to four villages per player.")
 	if player_team_id<=0 or opponent_team_id<=0: errors.append("Team IDs must be positive.")
 	if not player_assignments.is_empty():
 		if player_assignments.size()<2 or player_assignments.size()>NetworkProtocol.MAX_PLAYERS: errors.append("Multiplayer requires two to four players.")
@@ -70,6 +74,8 @@ func copy() -> MatchConfig:
 	result.player_faction_id=player_faction_id; result.opponent_faction_id=opponent_faction_id
 	result.opponent_controller=opponent_controller; result.ai_difficulty=ai_difficulty
 	result.world_population_preset=world_population_preset
+	result.villages_per_player=villages_per_player
+	result.cliff_generation=cliff_generation
 	result.player_team_id=player_team_id; result.opponent_team_id=opponent_team_id
 	result.player_assignments=player_assignments.duplicate(true); result.network_match=network_match
 	result.private_population_seed=private_population_seed
@@ -114,13 +120,15 @@ func controller_kinds() -> Array[String]:
 	return result
 
 func public_network_dictionary() -> Dictionary:
-	return {"world_seed":world_seed,"planet_size":planet_size,"world_population_preset":world_population_preset,
+	return {"world_seed":world_seed,"planet_size":planet_size,"world_population_preset":world_population_preset,"villages_per_player":villages_per_player,"cliff_generation":cliff_generation,
 		"player_assignments":player_assignments.duplicate(true)}
 
 static func from_network_dictionary(data: Dictionary) -> MatchConfig:
 	var result:=MatchConfig.new(); result.network_match=true
 	result.world_seed=int(data.get("world_seed",result.world_seed)); result.planet_size=int(data.get("planet_size",PlanetSize.SMALL))
 	result.world_population_preset=String(data.get("world_population_preset",WorldPopulationConfig.STANDARD))
+	result.villages_per_player=clampi(int(data.get("villages_per_player",2)),0,4)
+	result.cliff_generation=String(data.get("cliff_generation","Rare"))
 	for value: Variant in data.get("player_assignments",[]):
 		if value is Dictionary: result.player_assignments.append((value as Dictionary).duplicate(true))
 	if not result.player_assignments.is_empty():

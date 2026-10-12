@@ -26,9 +26,9 @@ func test_relationships_and_neutrals() -> void:
 	var neutral:=GameState.Unit.new(500,50,"prototype_infantry",neutral_cell,-1,state.registry)
 	state.units[neutral.id]=neutral
 	state.refresh_visibility()
-	check(not rules.preview_attack(1,attacker.id,neutral.id).success,"Neutral units are not valid attack targets")
-	state.relationships.set_relationship(1,50,RelationshipState.Kind.HOSTILE)
-	check(rules.preview_attack(1,attacker.id,neutral.id).success,"The same neutral unit is attackable after an explicit hostile relationship")
+	check(rules.preview_attack(1,attacker.id,neutral.id).success,"A player may deliberately target a visible non-allied neutral unit")
+	var neutral_hp:=neutral.hp
+	check(rules.try_attack(1,attacker.id,neutral.id).success and neutral.hp<neutral_hp and state.relationships.between(1,50)==RelationshipState.Kind.HOSTILE,"Attacking a neutral unit deals damage and establishes hostility")
 	check(NeutralAI.new().choose_actions(state,50).is_empty(),"Neutral AI seam defaults to no actions")
 	check(state.turn_state.order==[1,2],"Neutral controllers do not enter the player turn order")
 	var first_serial:=state.turn_state.serial

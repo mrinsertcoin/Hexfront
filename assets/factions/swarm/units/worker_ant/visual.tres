@@ -9,4 +9,7 @@ model_path = "res://assets/factions/swarm/units/worker_ant/source/worker_ant.glb
 model_scale = Vector3(0.38, 0.38, 0.38)
 rotation_offset_degrees = Vector3(0, 180, 0)
 height_offset = 0.21
+squad_member_scale = 0.62
+squad_spacing = 1.22
+squad_formation = "cross_five"
 notes = "Worker Ant; static M21A integration."

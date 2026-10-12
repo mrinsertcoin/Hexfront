@@ -16,6 +16,8 @@ const MODEL_VISUAL_PATHS := [
 	"res://assets/factions/swarm/units/spider/visual.tres",
 	"res://assets/factions/swarm/units/warrior_ant/visual.tres",
 	"res://assets/factions/swarm/units/worker_ant/visual.tres",
+	"res://assets/neutral/village/villager/visual.tres",
+	"res://assets/neutral/village/knight/visual.tres",
 ]
 
 var _model_visuals: Dictionary[String,ModelVisualDefinition] = {}
@@ -60,6 +62,7 @@ const ASSET_FILES: Dictionary = {
 	"prototype_scout": "res://assets/hx_scout_v1.glb",
 	"prototype_gunner": "res://assets/hx_gunner_v1.glb",
 	"prototype_headquarters": "res://assets/hx_hq_v1.glb",
+	"village": "res://assets/neutral/village/tile/source/village_tile.glb",
 }
 
 func asset_scene(kind: String) -> PackedScene:

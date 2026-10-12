@@ -4,6 +4,9 @@ extends Resource
 const VERSION: int = 1
 @export var world_seed: int = 48293617
 @export var world_generation_version: int = VERSION
+## Production matches override the legacy continuous height recipe.
+@export var terraced_terrain: bool=false
+@export_enum("None","Rare","Low","Moderate","High","Experimental") var cliff_generation: String="Rare"
 
 @export_group("Height")
 @export var height_frequencies: Vector3 = Vector3(1.35, 3.8, 11.0)
@@ -80,6 +83,7 @@ func to_dict() -> Dictionary:
 
 func validate() -> PackedStringArray:
 	var errors := PackedStringArray()
+	if cliff_generation not in TerracedTerrain.CLIFF_PRESETS: errors.append("Invalid cliff generation preset")
 	if world_generation_version != VERSION:
 		errors.append("Unsupported world generation version")
 	for key: String in to_dict():

@@ -13,9 +13,18 @@ func available_technologies(player_id: int) -> PackedStringArray:
 func can_start_research(player_id: int,technology_id: String) -> String:
 	var player:=state.player_for_controller(player_id)
 	if player==null: return "Unknown player."
+	var authority_error:=RuleAuthority.actor_error(state,player_id)
+	if not authority_error.is_empty(): return authority_error
 	if not player.research.current_technology_id.is_empty(): return "Research is already in progress."
 	var faction:=state.registry.faction(player.faction_id)
-	if not player.research.is_available(technology_id,state.registry,faction.technology_ids): return "Technology is not available."
+	if technology_id not in faction.technology_ids: return "Technology does not belong to this faction."
+	var definition:=state.registry.technology(technology_id)
+	if definition==null: return "Unknown technology."
+	if player.research.is_completed(technology_id): return "Research already completed."
+	var missing:=PackedStringArray()
+	for prerequisite: String in definition.prerequisite_ids:
+		if not player.research.is_completed(prerequisite): missing.append(state.registry.technology(prerequisite).display_name)
+	if not missing.is_empty(): return "Requires: "+", ".join(missing)
 	return ""
 
 func start_research(player_id: int,technology_id: String) -> RuleResult:

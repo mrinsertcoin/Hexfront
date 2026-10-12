@@ -22,6 +22,8 @@ var network_ready: bool=false
 var network_slots: OptionButton
 var network_planet_size: OptionButton
 var network_population: OptionButton
+var network_villages: OptionButton
+var network_cliffs: OptionButton
 var network_seed: LineEdit
 var disconnected_player_id: int=0
 
@@ -34,6 +36,8 @@ var setup_controller: OptionButton
 var setup_difficulty: OptionButton
 var setup_planet_size: OptionButton
 var setup_world_population: OptionButton
+var setup_villages: OptionButton
+var setup_cliffs: OptionButton
 var setup_seed: LineEdit
 var setup_feedback: Label
 var options_fullscreen: CheckButton
@@ -115,6 +119,7 @@ func _menu_column(title: String, width: float = 430.0, overlay: bool = false) ->
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size.x = width
 	center.add_child(panel)
+	MythicFrame.apply(panel)
 	var margin := MarginContainer.new()
 	for side: String in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 28)
 	panel.add_child(margin)
@@ -125,6 +130,7 @@ func _menu_column(title: String, width: float = 430.0, overlay: bool = false) ->
 	heading.text = title
 	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	heading.add_theme_font_size_override("font_size", 32)
+	heading.add_theme_font_override("font",MythicFrame.TITLE_FONT)
 	column.add_child(heading)
 	var rule := HSeparator.new()
 	column.add_child(rule)
@@ -197,7 +203,9 @@ func show_host_setup() -> void:
 		network_planet_size.add_item(definition.name); network_planet_size.set_item_metadata(network_planet_size.item_count-1,size)
 	_row(column,"Planet size",network_planet_size)
 	network_population=_option(PackedStringArray(WorldPopulationConfig.PRESETS),2); _row(column,"World population",network_population)
+	network_villages=_option(PackedStringArray(["0","1","2","3","4"]),2); _row(column,"Villages per Player",network_villages)
 	network_seed=LineEdit.new(); network_seed.text=str(48293617); _row(column,"World seed",network_seed)
+	network_cliffs=_advanced_terrain_settings(column)
 	var actions:=HBoxContainer.new(); actions.add_theme_constant_override("separation",8); column.add_child(actions)
 	_button(actions,"Back",show_multiplayer_menu).size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	_button(actions,"Create Lobby",_create_network_lobby).size_flags_horizontal=Control.SIZE_EXPAND_FILL
@@ -226,7 +234,8 @@ func _create_network_lobby() -> void:
 	if seed_value==null:
 		network_feedback.text="Enter a signed 64-bit world seed."; return
 	var configuration: Dictionary={"planet_size":int(network_planet_size.get_item_metadata(network_planet_size.selected)),
-		"world_seed":int(seed_value),"world_population_preset":network_population.get_item_text(network_population.selected)}
+		"world_seed":int(seed_value),"world_population_preset":network_population.get_item_text(network_population.selected),
+		"villages_per_player":network_villages.selected,"cliff_generation":network_cliffs.get_item_text(network_cliffs.selected)}
 	var error:=network_session.host_game(int(network_port.value),network_name.text,
 		String(network_faction.get_item_metadata(network_faction.selected)),int(network_slots.get_item_metadata(network_slots.selected)),configuration)
 	if error==OK: network_ready=false; show_network_lobby()
@@ -253,8 +262,8 @@ func show_network_lobby() -> void:
 	players.text="\n".join(lines); column.add_child(players)
 	var config:=network_session.lobby_match_config
 	var size: Dictionary=MatchConfig.SIZE_DEFINITIONS.get(int(config.get("planet_size",MatchConfig.PlanetSize.SMALL)),MatchConfig.SIZE_DEFINITIONS[MatchConfig.PlanetSize.SMALL])
-	var match_info:=Label.new(); match_info.text="MATCH  %s planet  ·  Seed %d  ·  Population %s  ·  Capacity %d" % [
-		String(size.name),int(config.get("world_seed",0)),String(config.get("world_population_preset",WorldPopulationConfig.STANDARD)),network_session.lobby_capacity]
+	var match_info:=Label.new(); match_info.text="MATCH  %s planet  ·  Seed %d  ·  Population %s  ·  Villages/P %d  ·  Cliffs %s  ·  Capacity %d" % [
+		String(size.name),int(config.get("world_seed",0)),String(config.get("world_population_preset",WorldPopulationConfig.STANDARD)),int(config.get("villages_per_player",2)),String(config.get("cliff_generation","Rare")),network_session.lobby_capacity]
 	match_info.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART; match_info.modulate=Color("#a8bac8"); column.add_child(match_info)
 	var choice:=OptionButton.new()
 	for faction: FactionDefinition in _multiplayer_factions():
@@ -278,6 +287,8 @@ func _start_network_match() -> void:
 	config.world_seed=int(network_session.lobby_match_config.get("world_seed",48293617))
 	config.private_population_seed=config.world_seed ^ 0x51A7E3D
 	config.world_population_preset=String(network_session.lobby_match_config.get("world_population_preset",WorldPopulationConfig.STANDARD))
+	config.villages_per_player=int(network_session.lobby_match_config.get("villages_per_player",2))
+	config.cliff_generation=String(network_session.lobby_match_config.get("cliff_generation","Rare"))
 	for record: Dictionary in network_session.lobby_records():
 		config.player_assignments.append({"player_id":int(record.player_id),"player_name":String(record.player_name),
 			"faction_id":String(record.faction_id),"team_id":int(record.player_id),"controller_kind":ControllerState.HUMAN,
@@ -324,6 +335,11 @@ func _network_session_ended(reason: String) -> void:
 
 func _network_participant_disconnected(player_id: int,player_name: String) -> void:
 	if screen_name not in ["game","network_game"]: return
+	if network_session.status==NetworkSession.Status.ACTIVE:
+		if board!=null:
+			board._feedback("%s disconnected and was eliminated. The match continues." % player_name)
+			board._refresh_display()
+		return
 	disconnected_player_id=player_id
 	screen_name="network_interrupt"
 	var column:=_menu_column("Player Disconnected",520,true)
@@ -372,6 +388,7 @@ func show_match_setup() -> void:
 		setup_planet_size.set_item_metadata(setup_planet_size.item_count - 1, size)
 	setup_planet_size.select(0)
 	setup_world_population=_option(PackedStringArray(WorldPopulationConfig.PRESETS),2)
+	setup_villages=_option(PackedStringArray(["0","1","2","3","4"]),2)
 	setup_seed = LineEdit.new()
 	setup_seed.text = "48293617"
 	setup_seed.placeholder_text = "Signed 64-bit integer"
@@ -382,12 +399,14 @@ func show_match_setup() -> void:
 	_row(column, "AI difficulty", setup_difficulty)
 	_row(column, "Planet size", setup_planet_size)
 	_row(column, "World population", setup_world_population)
+	_row(column, "Villages per Player", setup_villages)
 	var seed_row := HBoxContainer.new()
 	seed_row.add_theme_constant_override("separation", 8)
 	seed_row.add_child(setup_seed)
 	setup_seed.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_button(seed_row, "Randomize", randomize_seed)
 	_row(column, "World seed", seed_row)
+	setup_cliffs=_advanced_terrain_settings(column)
 	setup_controller.item_selected.connect(_controller_changed)
 	setup_feedback = Label.new()
 	setup_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -404,6 +423,16 @@ func show_match_setup() -> void:
 
 func _controller_changed(_index: int) -> void:
 	setup_difficulty.disabled = setup_controller.get_item_text(setup_controller.selected) == "Human"
+
+func _advanced_terrain_settings(column: VBoxContainer) -> OptionButton:
+	var toggle:=Button.new(); toggle.text="Advanced Settings"; toggle.toggle_mode=true; column.add_child(toggle)
+	var section:=VBoxContainer.new(); section.visible=false; column.add_child(section)
+	var cliffs:=_option(TerracedTerrain.CLIFF_PRESETS,1); cliffs.tooltip_text="None: every height transition has a ramp. Rare: occasional impassable ground edges. Experimental: many cliffs."
+	_row(section,"Cliff generation",cliffs)
+	var note:=Label.new(); note.text="Four elevation layers · consistent %d° ramps\nCliffs block ground units; flying units can cross." % int(TerracedTerrain.RAMP_ANGLE_DEGREES)
+	note.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART; section.add_child(note)
+	toggle.toggled.connect(func(open: bool)->void: section.visible=open)
+	return cliffs
 
 func randomize_seed() -> void:
 	var rng := RandomNumberGenerator.new()
@@ -430,6 +459,8 @@ func setup_config() -> MatchConfig:
 	result.opponent_controller = setup_controller.get_item_text(setup_controller.selected)
 	result.ai_difficulty = setup_difficulty.get_item_text(setup_difficulty.selected)
 	result.world_population_preset=setup_world_population.get_item_text(setup_world_population.selected)
+	result.villages_per_player=setup_villages.selected
+	result.cliff_generation=setup_cliffs.get_item_text(setup_cliffs.selected)
 	return result
 
 func start_match_from_setup() -> void:

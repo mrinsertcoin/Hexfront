@@ -37,7 +37,7 @@
 - Base production: 3 Food, 2 Silk, 2 Synapse
 - Starting upkeep: 4 Food
 - Expansion: additional Spider costs 15 Silk, then +5 Silk per owned Spider; 2 turns
-- Research: 12 technologies; Symbiotic Foundations (Provisional) 4; Ant Adaptation (Provisional) 5; Queen Signal 6; Migration Networks 5; Marsh Metabolism (Provisional) 5; Marsh Longevity 6; Directed Metamorphosis (Provisional) 5; Apex Metamorphosis 7; Controlled Virulence (Provisional) 5; Migration Efficiency (Provisional) 6; Regenerative Clearings 5; Synaptic Bloom 5
+- Research: 15 technologies; Symbiotic Foundations 4; Ant Adaptation 5; Queen Signal 6; Migration Networks 5; Silken Roots 6; Marsh Metabolism 5; Marsh Longevity 6; Directed Metamorphosis 5; Apex Metamorphosis 7; Controlled Virulence 5; Migration Efficiency 6; Synaptic Bloom 5; Root Memory 8; Regenerative Clearings 5; Abundant Organs 6
 
 | Unit | Cost | Upkeep | HP | Move | Range | Damage | Important ability | Research requirement |
 |---|---:|---:|---:|---:|---:|---:|---|---|
@@ -45,16 +45,16 @@
 | Mite | 1 Food, 1 Synapse | 1 Food | 4 | 2 | 1 | 0 | synaptic, disease carrier | Available at start |
 | Worker Ant | 2 Food, 1 Synapse | 1 Food | 6 | 2 | 1 | 1 | road builder | Available at start |
 | Fighter Ant | 3 Food, 2 Synapse | 1 Food | 9 | 2 | 1 | 3 | standard combatant | Available at start |
-| Fire Ant | 4 Food, 3 Synapse | 2 Food | 7 | 2 | 2 | 2 | standard combatant | Ant Adaptation (Provisional) |
+| Fire Ant | 4 Food, 3 Synapse | 2 Food | 7 | 2 | 2 | 2 | standard combatant | Ant Adaptation |
 | Ant Queen | 6 Food, 2 Silk, 5 Synapse | 2 Food, 1 Silk | 12 | 2 | 1 | 2 | hero, queen connection source | Queen Signal |
-| Dragonfly | 3 Food, 2 Synapse | 2 Food | 6 | 4 | 1 | 3 | temporary, 5-turn lifespan | Marsh Metabolism (Provisional) |
-| Mosquito | 2 Food, 1 Synapse | 1 Food | 4 | 4 | 1 | 2 | temporary, 4-turn lifespan | Marsh Metabolism (Provisional) |
-| Poison Dart Frog | 5 Food, 3 Synapse | 3 Food | 8 | 2 | 2 | 3 | temporary, synaptic, 5-turn lifespan | Marsh Metabolism (Provisional) |
+| Dragonfly | 3 Food, 2 Synapse | 2 Food | 6 | 4 | 1 | 3 | temporary, 5-turn lifespan | Marsh Metabolism |
+| Mosquito | 2 Food, 1 Synapse | 1 Food | 4 | 4 | 1 | 2 | temporary, 4-turn lifespan | Marsh Metabolism |
+| Poison Dart Frog | 5 Food, 3 Synapse | 3 Food | 8 | 2 | 2 | 3 | temporary, synaptic, 5-turn lifespan | Marsh Metabolism |
 | Bullfrog | 7 Food, 4 Synapse | 4 Food | 13 | 2 | 1 | 4 | temporary, synaptic, 6-turn lifespan | Marsh Longevity |
 | Unke | 8 Food, 2 Silk, 5 Synapse | 4 Food, 1 Silk | 11 | 3 | 2 | 3 | temporary, synaptic, hero, 7-turn lifespan | Marsh Longevity |
 | Caterpillar | 4 Food | 3 Food | 7 | 2 | 1 | 1 | terrain harvester | Available at start |
-| Brimstone Butterfly | 5 Food, 2 Synapse | 2 Food | 7 | 4 | 1 | 3 | standard combatant | Directed Metamorphosis (Provisional) |
-| Fire Moth | 6 Food, 3 Synapse | 3 Food | 8 | 3 | 2 | 4 | standard combatant | Directed Metamorphosis (Provisional) |
+| Brimstone Butterfly | 5 Food, 2 Synapse | 2 Food | 7 | 4 | 1 | 3 | standard combatant | Directed Metamorphosis |
+| Fire Moth | 6 Food, 3 Synapse | 3 Food | 8 | 3 | 2 | 4 | standard combatant | Directed Metamorphosis |
 | Admiral | 8 Food, 2 Silk, 5 Synapse | 3 Food, 1 Silk | 11 | 4 | 2 | 4 | hero | Apex Metamorphosis |
 
 ### Deterministic development comparison

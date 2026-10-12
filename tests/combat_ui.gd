@@ -78,7 +78,7 @@ func _run() -> void:
 	board.set_process(false)
 	await process_frame
 	await process_frame
-	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.combat_planning_enabled=false
+	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.simultaneous_combat_enabled=false
 	board._refresh_display()
 	_check_fresh()
 	var baseline_children: int = board.get_child_count() - board.tiles.size()

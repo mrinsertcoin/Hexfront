@@ -12,6 +12,7 @@ extends Resource
 @export_range(1,12) var awareness_range: int=3
 @export_range(0,12) var leash_distance: int=3
 @export var site_guardian: bool=false
+@export var neutral_allegiance_id: String=""
 
 func validate() -> PackedStringArray:
 	var errors:=PackedStringArray()

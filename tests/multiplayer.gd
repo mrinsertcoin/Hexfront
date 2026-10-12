@@ -31,7 +31,7 @@ func test_protocol_and_config() -> void:
 	check(config.validate().is_empty() and config.faction_ids().size()==4,"Four-player-ready config permits duplicate faction selections")
 	config.private_population_seed=123456
 	check(not config.public_network_dictionary().has("private_population_seed"),"Private population seed is never included in public match config")
-	check(CommandDispatcher.COMMAND_TYPES.size()==31 and CommandDispatcher.LAY_LARVA in CommandDispatcher.COMMAND_TYPES and CommandDispatcher.CONSUME in CommandDispatcher.COMMAND_TYPES and CommandDispatcher.COMBAT_INTENT in CommandDispatcher.COMMAND_TYPES and CommandDispatcher.LOCK_COMBAT in CommandDispatcher.COMMAND_TYPES,"Command inventory covers every current mutating player action")
+	check(CommandDispatcher.COMMAND_TYPES.size()==31 and CommandDispatcher.LAY_LARVA in CommandDispatcher.COMMAND_TYPES and CommandDispatcher.CONSUME in CommandDispatcher.COMMAND_TYPES and CommandDispatcher.COMBAT_INTENT in CommandDispatcher.COMMAND_TYPES and CommandDispatcher.CLEAR_COMBAT_INTENT in CommandDispatcher.COMMAND_TYPES,"Command inventory covers every current mutating player action")
 
 func test_dispatch_authority_and_idempotency() -> void:
 	var state:=GameState.new(PlanetGrid.new(2))
@@ -175,7 +175,7 @@ func test_session_lifecycle() -> void:
 	check(session.status==NetworkSession.Status.LOBBY and not session.lobby_players.has(2),"Lobby disconnection removes peer/player mapping cleanly")
 	session._register_player(88422,2,"Remote","living_migration",false,true); session.match_has_started=true
 	session._on_peer_disconnected(88422)
-	check(session.status==NetworkSession.Status.INTERRUPTED and paused,"Active-match disconnection pauses authoritative progression")
+	check(session.status==NetworkSession.Status.ACTIVE and not paused,"Active-match disconnection cannot pause authoritative progression")
 	paused=false
 	session.shutdown("done"); session.queue_free(); await process_frame
 	var client:=NetworkSession.new(); root.add_child(client); await process_frame

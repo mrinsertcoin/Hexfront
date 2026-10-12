@@ -11,7 +11,7 @@ func _run() -> void:
 	board.set_process(false)
 	await process_frame
 	await process_frame
-	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.combat_planning_enabled=false; board._refresh_display()
+	board.game_state.setup["simultaneous_combat"]=false; board.game_state.turn_state.simultaneous_combat_enabled=false; board._refresh_display()
 	start_cell = board.game_state.units[2].cell_id
 	destination_cell = board.rules.reachable(1, 2)[-1]
 	check(board.animate_movement, "Movement presentation enabled by default")
@@ -49,7 +49,7 @@ func _run() -> void:
 		root.get_texture().get_image().save_png("res://.godot/movement_midway.png")
 	view.advance_movement(100.0)
 	check(not board.is_presenting() and not board.end_turn_button.disabled, "Finishing playback restores controls")
-	check(view.position.is_equal_approx(board.terrain_surface.sample_position(board.grid.get_cell(destination_cell).up, board.SURFACE_OFFSET)), "Visual ends exactly on accepted destination")
+	check(view.position.is_equal_approx(board.terrain_surface.ground_position(board.grid.get_cell(destination_cell).up, board.SURFACE_OFFSET)), "Ground visual ends exactly on accepted destination")
 	check(TestState.snapshot(board.game_state) == committed, "Presentation applies no additional gameplay changes")
 
 	# Cancellation after state replacement/death must not leave the UI blocked.
@@ -81,7 +81,6 @@ func _run() -> void:
 	# AI uses the identical presentation path and waits before its next command.
 	board._new_match("Vs AI")
 	board._ai_delay = 0.0
-	board.request_end_turn()
 	for frame in range(40):
 		await process_frame
 		if board.is_presenting():

@@ -2,7 +2,10 @@ class_name VisibilitySystem
 extends RefCounted
 ## Single authoritative boundary between complete GameState and team knowledge.
 
-var state: GameState
+var _state_ref: WeakRef
+var state: GameState:
+	get: return _state_ref.get_ref() as GameState if _state_ref!=null else null
+	set(value): _state_ref=weakref(value) if value!=null else null
 var states: Dictionary[int,VisibilityState]={}
 var last_recalculation_ms: float=0.0
 
@@ -130,7 +133,7 @@ func _structure_snapshot(structure: GameState.Structure) -> Dictionary:
 
 func _site_snapshot(site: WorldSiteState) -> Dictionary:
 	return {"id":site.id,"definition_id":site.definition_id,"cell_id":site.cell_id,"controller_id":site.controller_id,
-		"runtime_state":site.runtime_state.duplicate(true),"observed_round":state.round_number,"observed_turn":state.turn_state.serial}
+		"hp":site.hp,"max_hp":site.max_hp,"runtime_state":site.runtime_state.duplicate(true),"observed_round":state.round_number,"observed_turn":state.turn_state.serial}
 
 func _sorted_units() -> Array[GameState.Unit]:
 	var result: Array[GameState.Unit]=[]; result.assign(state.units.values())

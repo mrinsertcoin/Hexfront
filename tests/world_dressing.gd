@@ -14,12 +14,13 @@ func state_snapshot() -> String:
 func _run() -> void:
 	await setup(false)
 	var dressing: WorldDressing=board.terrain_renderer.dressing
+	dressing.apply_visibility(board.view_observation,board.grid)
 	check(dressing!=null,"Terrain owns one world-dressing system")
 	check(dressing.get_node_or_null("VegetationScatter")!=null and dressing.get_node_or_null("RockScatter")!=null
 		and dressing.get_node_or_null("DebrisScatter")!=null,"Dressing keeps category hierarchy")
 	check(dressing.config.definitions.size()==5,"Five composed landscape cluster rules replace independent scatter")
 	check(dressing.authored_variant_count==8,"Eight reviewed stylized assets are active")
-	check(dressing.instances.size()==24,"Eight assets use three explicit MultiMesh LOD batches")
+	check(dressing.instances.size()>0 and dressing.instances.size()<=8*20*3 and dressing.instances.size()%3==0,"Scenery uses bounded spatial batches with three explicit LODs")
 	var variant_ids:={}
 	for definition: DressingDefinition in dressing.config.definitions:
 		check(definition.minimum_cluster_instances>=1 and definition.maximum_cluster_instances>=definition.minimum_cluster_instances,
@@ -35,6 +36,10 @@ func _run() -> void:
 		check(batch.multimesh!=null and batch.multimesh.mesh!=null,"Every LOD batch has authored geometry")
 		check(batch.multimesh.mesh.has_meta("dressing_source"),"Primitive fallback is absent from active dressing")
 		check(batch.multimesh.mesh.get_meta("stylized_lod")==dressing.batch_lods[batch_id],"Batch binds its supplied LOD")
+		var permitted:=0
+		for cell_id: int in dressing.batch_cells[batch_id]:
+			if board.view_observation.is_explored(cell_id): permitted+=1
+		check(batch.multimesh.visible_instance_count==permitted,"Unexplored props are excluded from submitted instance counts: %s submitted=%d permitted=%d" % [batch_id,batch.multimesh.visible_instance_count,permitted])
 		for surface in range(batch.multimesh.mesh.get_surface_count()):
 			var material:=batch.multimesh.mesh.surface_get_material(surface)
 			check(material!=null,"Authored material survives normalization")
@@ -77,6 +82,13 @@ func _run() -> void:
 			check(dressing.instances[batch_id].visible==expected_visible,"Zoom band selects exactly one supplied asset LOD")
 	dressing.set_zoom_band("PLANET")
 	for batch: MultiMeshInstance3D in dressing.instances.values(): check(not batch.visible,"Planet zoom hides dressing")
+	var blank:=TeamObservation.new(); blank.team_id=999; blank.revision=1
+	blank.explored_cells.resize(board.grid.get_cell_count()); blank.explored_cells.fill(0)
+	dressing.apply_visibility(blank,board.grid)
+	for batch: MultiMeshInstance3D in dressing.instances.values(): check(batch.multimesh.visible_instance_count==0,"A fresh observer submits no hidden scenery")
+	dressing.apply_visibility(board.view_observation,board.grid,true)
+	for batch: MultiMeshInstance3D in dressing.instances.values(): check(batch.multimesh.visible_instance_count==batch.multimesh.instance_count,"Omniscient display restores every scenery instance")
+	dressing.apply_visibility(board.view_observation,board.grid)
 	var visual_before:=dressing.visual_fingerprint
 	var counts_before:=dressing.variant_counts.duplicate(true)
 	var world_before:=board.generated_planet.generation_fingerprint

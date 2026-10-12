@@ -26,8 +26,8 @@ One application-level [`MusicManager`](scripts/audio/music_manager.gd) plays The
 - **F1:** strong debug cell outlines (hidden by default). **F2:** orange pentagon outlines. **F3:** cell centers. **F4:** cell IDs / neighbor counts. Pentagon markings are debug-only and off by default; labels are created only when requested.
 - **F6:** procedural-world panel with seed controls, summary, debug-view selector, and selected/hovered-cell diagnostics. **F7:** cycle base fields, biomes, strategic regions, flow direction, accumulation, drainage basins, lakes, rivers, hydrology moisture, and wetland potential.
 - **F8:** toggle camera diagnostics.
-- **End Turn:** pass control. Disabled during movement, AI work, and after victory. Camera and inspection remain available.
-- **R / P:** open Research or focus the selected entity's production/context actions. **Tab / Shift+Tab:** cycle active units. **Enter:** end turn.
+- **End Movement Phase:** finish movement, management, and queued combat choices. After every living player finishes, queued orders resolve automatically and empty combat is skipped. Disabled during movement, AI work, and after victory.
+- **R / P:** open Research or focus the selected entity's production/context actions. **Tab / Shift+Tab:** cycle active units. **Enter:** mark your movement planning ready.
 - **Targeting modes:** road, Pillar/bridge, heal, repair, designate, and recruitment show distinct legal-cell overlays. Right-click or **Escape** cancels the mode before Escape opens Pause.
 - **Restart:** shown after victory. Restores initial units, HP, actions, economy, selection and camera, retaining the match mode and the same cached topology. Mode buttons also start a new match.
 
@@ -61,19 +61,23 @@ The selectable **Living Migration** faction uses Food, Silk, and Synapse; mobile
 
 The selectable **Baumeister** faction uses Food, Materials, Energy, and Unity to build local-Integrity Pillar Cities, owned districts, and damageable bridge supply networks. It includes weighted bridge movement, specialized biological/vehicle support, deployable artillery, target designation, and a legal development AI. See [Milestone 14B](docs/Milestone_14B_Baumeister.md).
 
-The [Alpha 0.1 balance report](docs/Balance_Alpha01.md) is generated from the current content definitions. Milestone 20 gives Living Migration 12 technologies and Baumeister 10, makes faction upgrades affect their authored mechanics, and makes unpaid unit/district upkeep suspend production until recovery. Its deterministic comparison records opening production, military, research, expansion, and representative army costs without treating the result as an automated balance verdict.
+The [Alpha 0.1 balance report](docs/Balance_Alpha01.md) is generated from the current content definitions. Living Migration now has a [15-node prerequisite research root system](docs/Living_Research_Roots.md); Baumeister retains 10 technologies. Faction upgrades affect their authored mechanics, and unpaid unit/district upkeep suspends production until recovery. The deterministic comparison records opening production, military, research, expansion, and representative army costs without treating the result as an automated balance verdict.
 
 The [model inventory](docs/Model_Inventory.md) maps 11 Living Migration roster entries to imported textured GLBs through presentation-only visual profiles. Four roster entries without clear source models keep their generated placeholders. The inventory records exact mappings, transforms, rig/animation status, triangle and texture costs, and the repeatable graphical gallery workflow.
 
-The in-match [strategic interface](docs/Strategic_UI.md) presents faction-defined resources, authoritative production reasons, a reusable research tree, context actions, Spider/Pillar management, world-site inspection, interaction modes, and focusable notifications. Its state is rebuilt from the current match and is never serialized as gameplay.
+The in-match [strategic interface](docs/Strategic_UI.md) presents faction-defined resources, authoritative production reasons, a reusable research tree, context actions, Spider/Pillar management, world-site inspection, interaction modes, and focusable notifications. Selected units use a single bottom-left tactical card with an auto-framed rotating model preview, resolved statistics, grouped actions, statuses, and queued simultaneous-combat intent; enemy and last-seen cards expose only permitted observation data. Its state is rebuilt from the current match and is never serialized as gameplay.
 
-[World population](docs/World_Population.md) is a separately versioned deterministic layer over the generated planet. Match setup offers Off/Sparse/Standard/Dense density; Standard places region-aware trade posts, finite and renewable resource sites, one-shot guarded ruins, peaceful grazers, hostile predators, and ruin guardians outside safe starts. Generic site rules provide faction-compatible fixed trade, gathering, and exploration, followed by a bounded neutral phase after all players.
+Menus, research and city/unit cards share [mythic engraved frames](docs/Mythic_UI_Frames.md): antique-gold root knots, leaves and hex seals, with elaborate page borders and compact tactical borders. Vector ornaments preserve input and layout, and redraw only on resize.
+
+[World population](docs/World_Population.md) is a separately versioned deterministic layer over the generated planet. Match setup offers Off/Sparse/Standard/Dense density; Standard places region-aware trade posts, finite and renewable resource sites, one-shot guarded ruins, peaceful grazers, hostile predators, and ruin guardians outside safe starts. Generic site rules provide faction-compatible fixed trade, gathering, and exploration. Every round runs enemy activity (neutral units, then player AI), simultaneous human planning, and shared combat resolution.
+
+[Painted Ant roads and neutral villages](docs/Milestone_22_Ant_Roads_and_Villages.md) add topology-derived dirt/border overlays plus configurable deterministic single-tile villages with shared-allegiance defenders, peaceful faction-compatible trade, scoped hostility, destruction, and one-time loot.
 
 [Fog of war](docs/Fog_of_War.md) derives packed unexplored/explored/visible masks, detached current observations, immutable last-known contacts, site memory, concealment detection, Tracking reveal, and team-shared spotting from authoritative state. The spherical overlay, entity/site filtering, hotseat privacy handoff, and player AI all consume the same permitted observation.
 
 [Multiplayer](docs/Multiplayer_Architecture.md) adds a configurable ENet host/join flow, a four-player-ready peer/player registry and development lobby, compatibility handshakes, exact-once primitive commands, host-only simulation, private population seeding, per-recipient observation snapshots, revision/resynchronization handling, and predictable disconnect cleanup. Two-player localhost integration launches independent Godot processes; the document includes the separate two-computer Windows procedure and current development-client limitations.
 
-[Four-player free-for-all](docs/Multiplayer_FFA.md) upgrades that flow to synchronized 2–4 player capacity, Living Migration/Baumeister duplicate faction selection, independent ownership colors and fog, graph-spaced faction-aware starts, four-player turns, explicit elimination/victory, deterministic disconnect removal, and a real four-process localhost regression.
+[Four-player free-for-all](docs/Multiplayer_FFA.md) upgrades that flow to synchronized 2–4 player capacity, Living Migration/Baumeister duplicate faction selection, independent ownership colors and fog, graph-spaced faction-aware starts, simultaneous human turns, explicit elimination/victory, deterministic disconnect removal, and a real four-process localhost regression.
 
 Height combines continent, regional, and detail scales plus explicit sphere-space domain warp. Temperature combines latitude, coherent noise, and elevation cooling. Moisture is coherent 3D noise; fertility combines temperature, moisture, height, and local variation; terrain roughness measures a dedicated coherent field. Five data-defined [`BiomeDefinition`](scripts/world/biome_definition.gd) resources score those fields continuously, and every cell retains normalized weights alongside its dominant biome. Regions grow deterministically across grid adjacency from farthest-point seeds; undersized regions merge by shared border and stable tie-breaks, then cache aggregate field and biome values.
 
@@ -134,7 +138,7 @@ Normal idle viewing hides the grid. Selection/reachability/path/attack overlays 
 
 Each side starts with these three units and one 25-HP HQ. A unit can move once and attack once per turn. Moving first permits an attack; attacking spends remaining movement. Each edge costs 1; units and structures block passage. Attacks use graph distance, ignore intervening entities, always hit for fixed damage and never retaliate.
 
-Players start with 8 materials and gain 3 at turn start, including the initial turn: **P1 11 / P2 8**. Turn-start processing is idempotent. Each HQ recruits once per owner turn into an adjacent empty cell, including at pentagons. Recruits have full HP and both actions become available on their next owner turn.
+Players start with 8 materials and gain 3 when their shared player stage opens, including the initial round. Turn-start processing is idempotent. Each HQ recruits once per owner round into an adjacent empty cell, including at pentagons. Recruits have full HP and both actions become available in their next player stage.
 
 **Destroy the enemy HQ to win.** Army elimination alone does not win. The AI retains its recruitment, attack and movement priorities and uses the same rules commands. Its actions are bounded per turn and wait for movement presentation.
 
@@ -154,11 +158,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests/run_all.ps1
 # Full mouse-routed battle and movement/rig suites can also run graphically:
 & $godotExecutable --path . --script res://tests/combat_ui.gd --quit-after 5000
 & $godotExecutable --path . --script res://tests/animation.gd --quit-after 5000
+# Selected-unit overlay framing, information safety, and supported resolutions:
+& $godotExecutable --path . --script res://tests/strategic_ui_graphical.gd --quit-after 5000
+& $godotExecutable --path . --script res://tests/overlay_ux.gd --quit-after 5000
+& $godotExecutable --path . --script res://tests/terraces_graphical.gd --quit-after 5000
+& $godotExecutable --path . --script res://tests/village_defenders_graphical.gd --quit-after 5000
+# Medium loading/memory and a real 300-unit stress scene:
+& $godotExecutable --headless --path . --script res://tests/planet_performance.gd -- --medium
+& $godotExecutable --path . --script res://tests/planet_performance.gd -- --board
 # Static Swarm roster gallery and board integration:
 & $godotExecutable --path . --script res://tests/swarm_models_graphical.gd --quit-after 5000
 ```
 
-The runner imports/parses first, then runs **34 headless suites** plus real two-process and four-process ENet integrations, including dedicated model-asset, balance, FFA performance, multiplayer, visibility, Living Migration, Baumeister, strategic UI, and world-population coverage; content-foundation, world-interaction, world-dressing determinism, placement, slope/water exclusion, LOD, density, fallback, and gameplay-isolation checks. It rejects script/engine errors, missing completion markers and nonzero failures, even if Godot returns exit code 0. Logs are saved under `.godot/10_*.log`.
+The runner imports/parses first, then runs **41 headless suites** plus real two-process and four-process ENet integrations, including dedicated model-asset, balance, FFA and planet performance, multiplayer, visibility, Living Migration, Baumeister, strategic UI, and world-population coverage; content-foundation, world-interaction, world-dressing determinism, placement, slope/water exclusion, LOD, density, fallback, and gameplay-isolation checks. It rejects script/engine errors, missing completion markers and nonzero failures, even if Godot returns exit code 0. Logs are saved under `.godot/10_*.log`.
 
 Coverage includes all six topology subdivision counts and generated worlds at levels 0 through 4; deterministic serialization and fingerprints, independent sub-seeds, seam continuity, latitude and elevation effects, normalized biome blends, connected regions and deterministic cleanup; plus adjacency, pathfinding, picking, movement, combat, economy, AI, restart, and rig tracks. The procedural suite performs 80,371 checks at the default seed.
 
@@ -167,6 +179,10 @@ Graphical smoke covers procedural debug modes, seed identity, gameplay, navigati
 Physical mouse/keyboard feel remains a manual check; automated UI tests inject actual viewport events. To repeat manually: launch a Small match, select and move a Scout, pan during movement, focus an HQ and recruit, navigate to the opposite hemisphere, try close and whole-planet zoom, pause/resume, return to Main Menu, and start another match. For a complete scripted battle, run `combat_ui.gd` above.
 
 ## Limits and next milestone
+
+[Terraced terrain](docs/Terraced_Terrain.md) replaces continuous height displacement in normal matches with four elevation levels, a shared ramp profile, rare cliffs that block ground movement, and red cliff rims. New Game and Host Game expose cliff density under Advanced Settings. Uploaded terrain textures are organized under assets/terrain/materials, and walking units contact the rendered surface.
+
+[Medium performance](docs/Planet_Performance.md) documents compressed texture budgets, spatial scenery batches and cell picking, cached minimap terrain, batched Connection queries, horizon culling, match-state cleanup, and a repeatable busy-world benchmark. Medium retains all 10,242 gameplay cells.
 
 The renderer is a single-valued radial height surface with static chunks. Erosion, channel carving, animated water, terrain gameplay effects, and terrain-mesh LOD remain future work. Large structures use their host-cell height without flattening the ground beneath their footprint.
 

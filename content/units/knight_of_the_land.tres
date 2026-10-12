@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="UnitDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/content/unit_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "knight_of_the_land"
+display_name = "Knight of the Land"
+description = "A village's durable elite guardian."
+max_hp = 16
+movement = 2
+attack_range = 1
+attack_damage = 5
+corpse_food_value = 3
+vision_range = 3
+tags = PackedStringArray("neutral", "village_guard", "elite", "biological")
+visual_id = "knight_of_the_land"

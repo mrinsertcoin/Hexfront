@@ -23,6 +23,7 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var background:=ColorRect.new(); background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	background.color=Color("#101923"); add_child(background)
+	MythicFrame.apply(background)
 	var margin:=MarginContainer.new(); margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["left","right","top","bottom"]: margin.add_theme_constant_override("margin_"+side,24)
 	background.add_child(margin)
@@ -73,16 +74,18 @@ func _show_result(result: Dictionary) -> void:
 func _show_observation(snapshot: Dictionary) -> void:
 	var turn: Dictionary=snapshot.get("turn",{})
 	var winner_id:=int(turn.get("winner_id",0))
-	turn_label.text="Active player: P%d | Round %d%s%s" % [int(turn.get("active_player",0)),int(turn.get("round_number",0)),
-		" | Neutral phase" if bool(turn.get("neutral_phase",false)) else ""," | Match complete" if winner_id!=0 else ""]
+	var simultaneous_stage:=bool(turn.get("simultaneous_stage",false))
+	var actionable: Array=turn.get("actionable_players",[])
+	var stage_text:="Enemy turn" if bool(turn.get("neutral_phase",false)) or not simultaneous_stage else "Simultaneous player turns (%d planning)" % actionable.size()
+	turn_label.text="Round %d | %s%s" % [int(turn.get("round_number",0)),stage_text," | Match complete" if winner_id!=0 else ""]
 	var player_lines:=PackedStringArray(["[b]PLAYERS[/b]"])
 	for player: Dictionary in snapshot.get("players",[]):
-		var marker:="WINNER" if int(player.player_id)==winner_id else ("ELIMINATED" if bool(player.get("defeated",false)) else ("ACTIVE" if int(player.player_id)==int(turn.get("active_player",0)) else "ALIVE"))
+		var marker:="WINNER" if int(player.player_id)==winner_id else ("ELIMINATED" if bool(player.get("defeated",false)) else ("PLANNING" if actionable.has(int(player.player_id)) else ("READY" if turn.get("completed_players",[]).has(int(player.player_id)) else "ALIVE")))
 		if not bool(player.get("connected",true)): marker+=" / DISCONNECTED"
 		player_lines.append("[color=%s]●[/color] P%d %s · %s · %s" % [String(player.get("player_color","#9ca3a5")),
 			int(player.player_id),String(player.get("player_name","Player")),String(player.faction_id).replace("_"," ").capitalize(),marker])
 	players_label.text="\n".join(player_lines)
-	var may_act:=winner_id==0 and not bool(turn.get("neutral_phase",false)) and int(turn.get("active_player",0))==session.local_player_id and session.status==NetworkSession.Status.ACTIVE
+	var may_act:=winner_id==0 and actionable.has(session.local_player_id) and session.status==NetworkSession.Status.ACTIVE
 	send_button.disabled=not may_act; end_turn_button.disabled=not may_act
 	revision_label.text="Synchronization revision: %d | Visibility revision: %d" % [int(snapshot.get("sync_revision",0)),int(snapshot.get("visibility_revision",0))]
 	var own: Dictionary=snapshot.get("own_player",{})

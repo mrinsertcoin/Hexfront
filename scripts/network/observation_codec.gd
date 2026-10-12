@@ -6,6 +6,14 @@ static func encode(state: GameState,controller_id: int,sync_revision: int,events
 	var observation:=state.visibility_system.observation_for_controller(controller_id)
 	var player: PlayerState=state.players.get(controller_id)
 	var controller: ControllerState=state.controllers.get(controller_id)
+	var actionable_players: Array[int]=[]
+	for player_id: int in state.players:
+		if state.turn_state.can_act(player_id): actionable_players.append(player_id)
+	actionable_players.sort()
+	var completed_players: Array[int]=[]
+	for player_id: int in state.turn_state.completed_controllers:
+		if state.players.has(player_id): completed_players.append(player_id)
+	completed_players.sort()
 	var public_players: Array[Dictionary]=[]
 	for id: int in _sorted_int_keys(state.players):
 		var entry: PlayerState=state.players[id]
@@ -21,6 +29,9 @@ static func encode(state: GameState,controller_id: int,sync_revision: int,events
 		"recipient_team_id":controller.team_id if controller!=null else controller_id,
 		"turn":{"active_player":state.active_player,"round_number":state.round_number,"serial":state.turn_state.serial,
 			"neutral_phase":state.turn_state.neutral_phase,"phase":state.turn_state.phase,"winner_id":state.winner_id,
+			"simultaneous_player_turns":state.turn_state.simultaneous_player_turns_enabled,
+			"simultaneous_stage":state.turn_state.simultaneous_stage_started,
+			"actionable_players":actionable_players,"completed_players":completed_players,
 			"match_duration_seconds":state.match_duration_seconds()},
 		"players":public_players,
 		"own_player":_player_snapshot(player),
@@ -36,7 +47,7 @@ static func encode(state: GameState,controller_id: int,sync_revision: int,events
 		"owned_entities":_owned_entity_snapshots(state,controller_id),
 		"owned_faction_state":_owned_faction_state(state,controller_id),
 		"visible_world_state":_visible_world_state(state,observation,controller_id),
-		"combat_planning":state.combat_planning.snapshot_for(controller_id),
+		"combat_orders":state.combat_orders.snapshot_for(controller_id),
 		"events":state.public_events.duplicate(true) if events.is_empty() else events.duplicate(true),
 	}
 	return result

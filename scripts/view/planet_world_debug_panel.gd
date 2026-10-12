@@ -14,6 +14,7 @@ var _world: GeneratedPlanet
 var _population_line: String=""
 
 func _init() -> void:
+	MythicFrame.apply(self,true)
 	position = Vector2(18, 188)
 	custom_minimum_size = Vector2(285, 0)
 	visible = false

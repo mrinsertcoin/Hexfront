@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://deqeisvscn3gw"
-path="res://.godot/imported/caterpillar_0.png-8c082db1cdf841bd0097a61f4dc61a06.ctex"
+path.s3tc="res://.godot/imported/caterpillar_0.png-8c082db1cdf841bd0097a61f4dc61a06.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e00854da1cdaa9b81b5bb768f4ecce7b"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/factions/swarm/units/caterpillar/source/caterpillar_0.png"
-dest_files=["res://.godot/imported/caterpillar_0.png-8c082db1cdf841bd0097a61f4dc61a06.ctex"]
+dest_files=["res://.godot/imported/caterpillar_0.png-8c082db1cdf841bd0097a61f4dc61a06.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -39,5 +40,5 @@ process/premult_alpha=false
 process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
-process/size_limit=0
+process/size_limit=1024
 detect_3d/compress_to=1

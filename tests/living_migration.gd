@@ -66,9 +66,9 @@ func test_spider_terrain_slots_and_construction() -> void:
 	check(rules.start_spider_construction(1,spider.id).success,"Spider construction starts through rules")
 	var base_cost:=rules.living_migration_rules.spider_cost(1).silk
 	destination=first_free_neighbor(state,spider.cell_id); rules.try_move(1,spider.id,destination); rules.try_end_turn(1)
-	check(spider.spider_state.construction.progress_turns==0,"Moving pauses spider construction")
+	check(spider.spider_state.construction.progress_turns==1,"Moving does not pause spider construction")
 	rules.try_end_turn(2); rules.try_end_turn(1)
-	check(spider.spider_state.construction.progress_turns==1,"Stationary spider advances construction")
+	check(spider.spider_state.construction.progress_turns==2,"Stationary spider advances construction identically")
 	rules.try_end_turn(2); rules.try_end_turn(1); rules.try_end_turn(2)
 	var spider_cell:=first_free_neighbor(state,spider.cell_id)
 	check(rules.deploy_spider(1,spider.id,spider_cell).success,"Completed Spider construction deploys a second mobile headquarters")
@@ -78,7 +78,7 @@ func test_spider_terrain_slots_and_construction() -> void:
 	state.players[1].resources={"food":100,"silk":100,"synapse":100}
 	check(rules.queue_biological_production(1,spider.id,"worker_ant_brood").success,"Spider queues biological recruitment")
 	destination=first_free_neighbor(state,spider.cell_id); rules.try_move(1,spider.id,destination); rules.try_end_turn(1)
-	check(spider.spider_state.nursery_jobs[0].progress_turns==0,"Moving pauses biological recruitment progress")
+	check(spider.spider_state.nursery_jobs[0].progress_turns==1,"Moving does not pause biological recruitment progress")
 
 	state=make_state(); rules=GameRules.new(state); spider=state.units[1]
 	spider.spider_state.slots=PackedStringArray(["ant_hill","a","b","c","d","e","f","g","h"])

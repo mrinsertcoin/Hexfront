@@ -11,5 +11,5 @@ attack_damage = 4
 costs = {"food": 8, "silk": 2, "synapse": 5}
 upkeep = {"food": 3, "silk": 1}
 corpse_food_value = 6
-tags = PackedStringArray("metamorphic", "hero", "morale_immune", "disease_immune")
+tags = PackedStringArray("metamorphic", "hero", "morale_immune", "disease_immune", "flying")
 visual_id = "admiral"
